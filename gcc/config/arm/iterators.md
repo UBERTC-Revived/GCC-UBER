@@ -119,6 +119,10 @@
 ;; All supported vector modes (except singleton DImode).
 (define_mode_iterator VDQ [V8QI V16QI V4HI V8HI V2SI V4SI V4HF V8HF V2SF V4SF V2DI])
 
+;; All supported floating-point vector modes (except V2DF).
+(define_mode_iterator VF [(V4HF "TARGET_NEON_FP16INST")
+			   (V8HF "TARGET_NEON_FP16INST") V2SF V4SF])
+
 ;; All supported vector modes (except those with 64-bit integer elements).
 (define_mode_iterator VDQW [V8QI V16QI V4HI V8HI V2SI V4SI V2SF V4SF])
 
@@ -409,6 +413,8 @@
 (define_int_iterator VQRDMLH_AS [UNSPEC_VQRDMLAH UNSPEC_VQRDMLSH])
 
 (define_int_iterator VFM_LANE_AS [UNSPEC_VFMA_LANE UNSPEC_VFMS_LANE])
+
+(define_int_iterator DOTPROD [UNSPEC_DOT_S UNSPEC_DOT_U])
 
 ;;----------------------------------------------------------------------------
 ;; Mode attributes
@@ -712,6 +718,9 @@
 
 (define_mode_attr pf [(V8QI "p") (V16QI "p") (V2SF "f") (V4SF "f")])
 
+(define_mode_attr VSI2QI [(V2SI "V8QI") (V4SI "V16QI")])
+(define_mode_attr vsi2qi [(V2SI "v8qi") (V4SI "v16qi")])
+
 ;;----------------------------------------------------------------------------
 ;; Code attributes
 ;;----------------------------------------------------------------------------
@@ -808,6 +817,7 @@
   (UNSPEC_VSRA_S_N "s") (UNSPEC_VSRA_U_N "u")
   (UNSPEC_VRSRA_S_N "s") (UNSPEC_VRSRA_U_N "u")
   (UNSPEC_VCVTH_S "s") (UNSPEC_VCVTH_U "u")
+  (UNSPEC_DOT_S "s") (UNSPEC_DOT_U "u")
 ])
 
 (define_int_attr vcvth_op
@@ -995,3 +1005,6 @@
 
 (define_int_attr mrrc [(VUNSPEC_MRRC "mrrc") (VUNSPEC_MRRC2 "mrrc2")])
 (define_int_attr MRRC [(VUNSPEC_MRRC "MRRC") (VUNSPEC_MRRC2 "MRRC2")])
+
+(define_int_attr opsuffix [(UNSPEC_DOT_S "s8")
+			   (UNSPEC_DOT_U "u8")])

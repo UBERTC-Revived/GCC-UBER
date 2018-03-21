@@ -3044,6 +3044,76 @@
   DONE;
 })
 
+;; These instructions map to the __builtins for the Dot Product operations.
+(define_insn "neon_<sup>dot<vsi2qi>"
+  [(set (match_operand:VCVTI 0 "register_operand" "=w")
+	(plus:VCVTI (match_operand:VCVTI 1 "register_operand" "0")
+		    (unspec:VCVTI [(match_operand:<VSI2QI> 2
+							"register_operand" "w")
+				   (match_operand:<VSI2QI> 3
+							"register_operand" "w")]
+		DOTPROD)))]
+  "TARGET_DOTPROD"
+  "v<sup>dot.<opsuffix>\\t%<V_reg>0, %<V_reg>2, %<V_reg>3"
+  [(set_attr "type" "neon_dot")]
+)
+
+;; These instructions map to the __builtins for the Dot Product
+;; indexed operations.
+(define_insn "neon_<sup>dot_lane<vsi2qi>"
+  [(set (match_operand:VCVTI 0 "register_operand" "=w")
+	(plus:VCVTI (match_operand:VCVTI 1 "register_operand" "0")
+		    (unspec:VCVTI [(match_operand:<VSI2QI> 2
+							"register_operand" "w")
+				   (match_operand:V8QI 3 "register_operand" "t")
+				   (match_operand:SI 4 "immediate_operand" "i")]
+		DOTPROD)))]
+  "TARGET_DOTPROD"
+  {
+    operands[4]
+      = GEN_INT (NEON_ENDIAN_LANE_N (V8QImode, INTVAL (operands[4])));
+    return "v<sup>dot.<opsuffix>\\t%<V_reg>0, %<V_reg>2, %P3[%c4]";
+  }
+  [(set_attr "type" "neon_dot")]
+)
+
+;; These expands map to the Dot Product optab the vectorizer checks for.
+;; The auto-vectorizer expects a dot product builtin that also does an
+;; accumulation into the provided register.
+;; Given the following pattern
+;;
+;; for (i=0; i<len; i++) {
+;;     c = a[i] * b[i];
+;;     r += c;
+;; }
+;; return result;
+;;
+;; This can be auto-vectorized to
+;; r  = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
+;;
+;; given enough iterations.  However the vectorizer can keep unrolling the loop
+;; r += a[4]*b[4] + a[5]*b[5] + a[6]*b[6] + a[7]*b[7];
+;; r += a[8]*b[8] + a[9]*b[9] + a[10]*b[10] + a[11]*b[11];
+;; ...
+;;
+;; and so the vectorizer provides r, in which the result has to be accumulated.
+(define_expand "<sup>dot_prod<vsi2qi>"
+  [(set (match_operand:VCVTI 0 "register_operand")
+	(plus:VCVTI (unspec:VCVTI [(match_operand:<VSI2QI> 1
+							"register_operand")
+				   (match_operand:<VSI2QI> 2
+							"register_operand")]
+		     DOTPROD)
+		    (match_operand:VCVTI 3 "register_operand")))]
+  "TARGET_DOTPROD"
+{
+  emit_insn (
+    gen_neon_<sup>dot<vsi2qi> (operands[3], operands[3], operands[1],
+				 operands[2]));
+  emit_insn (gen_rtx_SET (operands[0], operands[3]));
+  DONE;
+})
+
 (define_expand "neon_copysignf<mode>"
   [(match_operand:VCVTF 0 "register_operand")
    (match_operand:VCVTF 1 "register_operand")
@@ -6247,28 +6317,22 @@ if (BYTES_BIG_ENDIAN)
 })
 
 (define_insn "neon_vabd<mode>_2"
- [(set (match_operand:VDQ 0 "s_register_operand" "=w")
-       (abs:VDQ (minus:VDQ (match_operand:VDQ 1 "s_register_operand" "w")
-                           (match_operand:VDQ 2 "s_register_operand" "w"))))]
- "TARGET_NEON && (!<Is_float_mode> || flag_unsafe_math_optimizations)"
+ [(set (match_operand:VF 0 "s_register_operand" "=w")
+       (abs:VF (minus:VF (match_operand:VF 1 "s_register_operand" "w")
+			 (match_operand:VF 2 "s_register_operand" "w"))))]
+ "TARGET_NEON && flag_unsafe_math_optimizations"
  "vabd.<V_s_elem> %<V_reg>0, %<V_reg>1, %<V_reg>2"
- [(set (attr "type")
-       (if_then_else (ne (symbol_ref "<Is_float_mode>") (const_int 0))
-                     (const_string "neon_fp_abd_s<q>")
-                     (const_string "neon_abd<q>")))]
+ [(set_attr "type" "neon_fp_abd_s<q>")]
 )
 
 (define_insn "neon_vabd<mode>_3"
- [(set (match_operand:VDQ 0 "s_register_operand" "=w")
-       (abs:VDQ (unspec:VDQ [(match_operand:VDQ 1 "s_register_operand" "w")
-                             (match_operand:VDQ 2 "s_register_operand" "w")]
-                 UNSPEC_VSUB)))]
- "TARGET_NEON && (!<Is_float_mode> || flag_unsafe_math_optimizations)"
+ [(set (match_operand:VF 0 "s_register_operand" "=w")
+       (abs:VF (unspec:VF [(match_operand:VF 1 "s_register_operand" "w")
+			    (match_operand:VF 2 "s_register_operand" "w")]
+		UNSPEC_VSUB)))]
+ "TARGET_NEON && flag_unsafe_math_optimizations"
  "vabd.<V_if_elem> %<V_reg>0, %<V_reg>1, %<V_reg>2"
- [(set (attr "type")
-       (if_then_else (ne (symbol_ref "<Is_float_mode>") (const_int 0))
-                     (const_string "neon_fp_abd_s<q>")
-                     (const_string "neon_abd<q>")))]
+ [(set_attr "type" "neon_fp_abd_s<q>")]
 )
 
 ;; Copy from core-to-neon regs, then extend, not vice-versa

@@ -209,6 +209,12 @@ extern tree arm_fp16_type_node;
 /* FPU supports ARMv8.1 Adv.SIMD extensions.  */
 #define TARGET_NEON_RDMA (TARGET_NEON && arm_arch8_1)
 
+/* Supports the Dot Product AdvSIMD extensions.  */
+#define TARGET_DOTPROD (TARGET_NEON					\
+			&& bitmap_bit_p (arm_active_target.isa,		\
+					isa_bit_dotprod)		\
+			&& arm_arch8_2)
+
 /* FPU supports the floating point FP16 instructions for ARMv8.2 and later.  */
 #define TARGET_VFP_FP16INST \
   (TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_FPU_ARMV8 && arm_fp16_inst)
@@ -1662,12 +1668,10 @@ enum arm_auto_incmodes
 
 /* These assume that REGNO is a hard or pseudo reg number.
    They give nonzero only if REGNO is a hard reg of the suitable class
-   or a pseudo reg currently allocated to a suitable hard reg.
-   Since they use reg_renumber, they are safe only once reg_renumber
-   has been allocated, which happens in reginfo.c during register
-   allocation.  */
+   or a pseudo reg currently allocated to a suitable hard reg.  */
 #define TEST_REGNO(R, TEST, VALUE) \
-  ((R TEST VALUE) || ((unsigned) reg_renumber[R] TEST VALUE))
+  ((R TEST VALUE)	\
+    || (reg_renumber && ((unsigned) reg_renumber[R] TEST VALUE)))
 
 /* Don't allow the pc to be used.  */
 #define ARM_REGNO_OK_FOR_BASE_P(REGNO)			\
