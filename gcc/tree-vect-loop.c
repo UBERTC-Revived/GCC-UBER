@@ -2492,8 +2492,9 @@ again:
       unsigned int size = STMT_VINFO_GROUP_SIZE (vinfo);
       tree vectype = STMT_VINFO_VECTYPE (vinfo);
       if (! vect_store_lanes_supported (vectype, size, false)
-	  && ! vect_grouped_store_supported (vectype, size))
-	return false;
+	 && ! known_eq (TYPE_VECTOR_SUBPARTS (vectype), 1U)
+	 && ! vect_grouped_store_supported (vectype, size))
+       return false;
       FOR_EACH_VEC_ELT (SLP_INSTANCE_LOADS (instance), j, node)
 	{
 	  vinfo = vinfo_for_stmt (SLP_TREE_SCALAR_STMTS (node)[0]);
@@ -6788,6 +6789,30 @@ vectorizable_reduction (gimple *stmt, gimple_stmt_iterator *gsi,
   /* If we have a condition reduction, see if we can simplify it further.  */
   if (v_reduc_type == COND_REDUCTION)
     {
+      /* TODO: We can't yet handle reduction chains, since we need to treat
+	 each COND_EXPR in the chain specially, not just the last one.
+	 E.g. for:
+
+	    x_1 = PHI <x_3, ...>
+	    x_2 = a_2 ? ... : x_1;
+	    x_3 = a_3 ? ... : x_2;
+
+	 we're interested in the last element in x_3 for which a_2 || a_3
+	 is true, whereas the current reduction chain handling would
+	 vectorize x_2 as a normal VEC_COND_EXPR and only treat x_3
+	 as a reduction operation.  */
+      if (reduc_index == -1)
+	{
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+			     "conditional reduction chains not supported\n");
+	  return false;
+	}
+
+      /* vect_is_simple_reduction ensured that operand 2 is the
+	 loop-carried operand.  */
+      gcc_assert (reduc_index == 2);
+
       /* Loop peeling modifies initial value of reduction PHI, which
 	 makes the reduction stmt to be transformed different to the
 	 original stmt analyzed.  We need to record reduction code for

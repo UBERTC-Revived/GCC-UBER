@@ -417,7 +417,7 @@ builtin_memref::set_base_and_offset (tree expr)
 
   poly_int64 bytepos = exact_div (bitpos, BITS_PER_UNIT);
 
-  /* Convert the poly_int64 offset to to offset_int.  The offset
+  /* Convert the poly_int64 offset to offset_int.  The offset
      should be constant but be prepared for it not to be just in
      case.  */
   offset_int cstoff;
@@ -1880,11 +1880,20 @@ check_bounds_or_overlap (gcall *call, tree dst, tree src, tree dstsize,
 
   if (operand_equal_p (dst, src, 0))
     {
-      warning_at (loc, OPT_Wrestrict,
-		  "%G%qD source argument is the same as destination",
-		  call, func);
-      gimple_set_no_warning (call, true);
-      return false;
+      /* Issue -Wrestrict unless the pointers are null (those do
+	 not point to objects and so do not indicate an overlap;
+	 such calls could be the result of sanitization and jump
+	 threading).  */
+      if (!integer_zerop (dst) && !gimple_no_warning_p (call))
+	{
+	  warning_at (loc, OPT_Wrestrict,
+		      "%G%qD source argument is the same as destination",
+		      call, func);
+	  gimple_set_no_warning (call, true);
+	  return false;
+	}
+
+      return true;
     }
 
   /* Return false when overlap has been detected.  */

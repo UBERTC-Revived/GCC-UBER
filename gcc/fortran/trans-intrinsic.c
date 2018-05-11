@@ -1860,7 +1860,7 @@ conv_caf_send (gfc_code *code) {
 
   lhs_expr = code->ext.actual->expr;
   rhs_expr = code->ext.actual->next->expr;
-  may_require_tmp = gfc_check_dependency (lhs_expr, rhs_expr, false) == 0
+  may_require_tmp = gfc_check_dependency (lhs_expr, rhs_expr, true) == 0
 		    ? boolean_false_node : boolean_true_node;
   gfc_init_block (&block);
 
@@ -1907,34 +1907,124 @@ conv_caf_send (gfc_code *code) {
     }
   else
     {
-      /* If has_vector, pass descriptor for whole array and the
-         vector bounds separately.  */
-      gfc_array_ref *ar, ar2;
-      bool has_vector = false;
+      bool has_vector = gfc_has_vector_subscript (lhs_expr);
 
-      if (gfc_is_coindexed (lhs_expr) && gfc_has_vector_subscript (lhs_expr))
+      if (gfc_is_coindexed (lhs_expr) || !has_vector)
 	{
-          has_vector = true;
-          ar = gfc_find_array_ref (lhs_expr);
-	  ar2 = *ar;
-	  memset (ar, '\0', sizeof (*ar));
-	  ar->as = ar2.as;
-	  ar->type = AR_FULL;
+	  /* If has_vector, pass descriptor for whole array and the
+	     vector bounds separately.  */
+	  gfc_array_ref *ar, ar2;
+	  bool has_tmp_lhs_array = false;
+	  if (has_vector)
+	    {
+	      has_tmp_lhs_array = true;
+	      ar = gfc_find_array_ref (lhs_expr);
+	      ar2 = *ar;
+	      memset (ar, '\0', sizeof (*ar));
+	      ar->as = ar2.as;
+	      ar->type = AR_FULL;
+	    }
+	  lhs_se.want_pointer = 1;
+	  gfc_conv_expr_descriptor (&lhs_se, lhs_expr);
+	  /* Using gfc_conv_expr_descriptor, we only get the descriptor, but
+	     that has the wrong type if component references are done.  */
+	  lhs_type = gfc_typenode_for_spec (&lhs_expr->ts);
+	  tmp = build_fold_indirect_ref_loc (input_location, lhs_se.expr);
+	  gfc_add_modify (&lhs_se.pre, gfc_conv_descriptor_dtype (tmp),
+			  gfc_get_dtype_rank_type (has_vector ? ar2.dimen
+							      : lhs_expr->rank,
+						   lhs_type));
+	  if (has_tmp_lhs_array)
+	    {
+	      vec = conv_caf_vector_subscript (&block, lhs_se.expr, &ar2);
+	      *ar = ar2;
+	    }
 	}
-      lhs_se.want_pointer = 1;
-      gfc_conv_expr_descriptor (&lhs_se, lhs_expr);
-      /* Using gfc_conv_expr_descriptor, we only get the descriptor, but that
-         has the wrong type if component references are done.  */
-      lhs_type = gfc_typenode_for_spec (&lhs_expr->ts);
-      tmp = build_fold_indirect_ref_loc (input_location, lhs_se.expr);
-      gfc_add_modify (&lhs_se.pre, gfc_conv_descriptor_dtype (tmp),
-                      gfc_get_dtype_rank_type (has_vector ? ar2.dimen
-							  : lhs_expr->rank,
-		      lhs_type));
-      if (has_vector)
+      else
 	{
-	  vec = conv_caf_vector_subscript (&block, lhs_se.expr, &ar2);
-	  *ar = ar2;
+	  /* Special casing for arr1 ([...]) = arr2[...], i.e. caf_get to
+	     indexed array expression.  This is rewritten to:
+
+	     tmp_array = arr2[...]
+	     arr1 ([...]) = tmp_array
+
+	     because using the standard gfc_conv_expr (lhs_expr) did the
+	     assignment with lhs and rhs exchanged.  */
+
+	  gfc_ss *lss_for_tmparray, *lss_real;
+	  gfc_loopinfo loop;
+	  gfc_se se;
+	  stmtblock_t body;
+	  tree tmparr_desc, src;
+	  tree index = gfc_index_zero_node;
+	  tree stride = gfc_index_zero_node;
+	  int n;
+
+	  /* Walk both sides of the assignment, once to get the shape of the
+	     temporary array to create right.  */
+	  lss_for_tmparray = gfc_walk_expr (lhs_expr);
+	  /* And a second time to be able to create an assignment of the
+	     temporary to the lhs_expr.  gfc_trans_create_temp_array replaces
+	     the tree in the descriptor with the one for the temporary
+	     array.  */
+	  lss_real = gfc_walk_expr (lhs_expr);
+	  gfc_init_loopinfo (&loop);
+	  gfc_add_ss_to_loop (&loop, lss_for_tmparray);
+	  gfc_add_ss_to_loop (&loop, lss_real);
+	  gfc_conv_ss_startstride (&loop);
+	  gfc_conv_loop_setup (&loop, &lhs_expr->where);
+	  lhs_type = gfc_typenode_for_spec (&lhs_expr->ts);
+	  gfc_trans_create_temp_array (&lhs_se.pre, &lhs_se.post,
+				       lss_for_tmparray, lhs_type, NULL_TREE,
+				       false, true, false,
+				       &lhs_expr->where);
+	  tmparr_desc = lss_for_tmparray->info->data.array.descriptor;
+	  gfc_start_scalarized_body (&loop, &body);
+	  gfc_init_se (&se, NULL);
+	  gfc_copy_loopinfo_to_se (&se, &loop);
+	  se.ss = lss_real;
+	  gfc_conv_expr (&se, lhs_expr);
+	  gfc_add_block_to_block (&body, &se.pre);
+
+	  /* Walk over all indexes of the loop.  */
+	  for (n = loop.dimen - 1; n > 0; --n)
+	    {
+	      tmp = loop.loopvar[n];
+	      tmp = fold_build2_loc (input_location, MINUS_EXPR,
+				     gfc_array_index_type, tmp, loop.from[n]);
+	      tmp = fold_build2_loc (input_location, PLUS_EXPR,
+				     gfc_array_index_type, tmp, index);
+
+	      stride = fold_build2_loc (input_location, MINUS_EXPR,
+					gfc_array_index_type,
+					loop.to[n - 1], loop.from[n - 1]);
+	      stride = fold_build2_loc (input_location, PLUS_EXPR,
+					gfc_array_index_type,
+					stride, gfc_index_one_node);
+
+	      index = fold_build2_loc (input_location, MULT_EXPR,
+				       gfc_array_index_type, tmp, stride);
+	    }
+
+	  index = fold_build2_loc (input_location, MINUS_EXPR,
+				   gfc_array_index_type,
+				   index, loop.from[0]);
+
+	  index = fold_build2_loc (input_location, PLUS_EXPR,
+				   gfc_array_index_type,
+				   loop.loopvar[0], index);
+
+	  src = build_fold_indirect_ref (gfc_conv_array_data (tmparr_desc));
+	  src = gfc_build_array_ref (src, index, NULL);
+	  /* Now create the assignment of lhs_expr = tmp_array.  */
+	  gfc_add_modify (&body, se.expr, src);
+	  gfc_add_block_to_block (&body, &se.post);
+	  lhs_se.expr = gfc_build_addr_expr (NULL_TREE, tmparr_desc);
+	  gfc_trans_scalarizing_loops (&loop, &body);
+	  gfc_add_block_to_block (&loop.pre, &loop.post);
+	  gfc_add_expr_to_block (&lhs_se.post, gfc_finish_block (&loop.pre));
+	  gfc_free_ss (lss_for_tmparray);
+	  gfc_free_ss (lss_real);
 	}
     }
 
@@ -4594,7 +4684,20 @@ gfc_conv_intrinsic_dot_product (gfc_se * se, gfc_expr * expr)
 	S++;
       }
    For 3) and 5), if mask is scalar, this all goes into a conditional,
-   setting pos = 0; in the else branch.  */
+   setting pos = 0; in the else branch.
+
+   Since we now also support the BACK argument, instead of using
+   if (a[S] < limit), we now use
+
+   if (back)
+     cond = a[S] <= limit;
+   else
+     cond = a[S] < limit;
+   if (cond) {
+     ....
+
+     The optimizer is smart enough to move the condition out of the loop.
+     The are now marked as unlikely to for further speedup.  */
 
 static void
 gfc_conv_intrinsic_minmaxloc (gfc_se * se, gfc_expr * expr, enum tree_code op)
@@ -4612,6 +4715,7 @@ gfc_conv_intrinsic_minmaxloc (gfc_se * se, gfc_expr * expr, enum tree_code op)
   tree offset;
   tree nonempty;
   tree lab1, lab2;
+  tree b_if, b_else;
   gfc_loopinfo loop;
   gfc_actual_arglist *actual;
   gfc_ss *arrayss;
@@ -4620,6 +4724,8 @@ gfc_conv_intrinsic_minmaxloc (gfc_se * se, gfc_expr * expr, enum tree_code op)
   gfc_se maskse;
   gfc_expr *arrayexpr;
   gfc_expr *maskexpr;
+  gfc_expr *backexpr;
+  gfc_se backse;
   tree pos;
   int n;
 
@@ -4676,6 +4782,7 @@ gfc_conv_intrinsic_minmaxloc (gfc_se * se, gfc_expr * expr, enum tree_code op)
   actual = actual->next->next;
   gcc_assert (actual);
   maskexpr = actual->expr;
+  backexpr = actual->next->next->expr;
   nonempty = NULL;
   if (maskexpr && maskexpr->rank != 0)
     {
@@ -4814,6 +4921,10 @@ gfc_conv_intrinsic_minmaxloc (gfc_se * se, gfc_expr * expr, enum tree_code op)
   gfc_conv_expr_val (&arrayse, arrayexpr);
   gfc_add_block_to_block (&block, &arrayse.pre);
 
+  gfc_init_se (&backse, NULL);
+  gfc_conv_expr_val (&backse, backexpr);
+  gfc_add_block_to_block (&block, &backse.pre);
+
   /* We do the following if this is a more extreme value.  */
   gfc_start_block (&ifblock);
 
@@ -4853,9 +4964,33 @@ gfc_conv_intrinsic_minmaxloc (gfc_se * se, gfc_expr * expr, enum tree_code op)
 				op == GT_EXPR ? GE_EXPR : LE_EXPR,
 				logical_type_node, arrayse.expr, limit);
       else
-	cond = fold_build2_loc (input_location, op, logical_type_node,
-				arrayse.expr, limit);
+	{
+	  tree ifbody2, elsebody2;
+	  
+	  /* We switch to > or >= depending on the value of the BACK argument. */
+	  cond = gfc_create_var (logical_type_node, "cond");
 
+	  gfc_start_block (&ifblock);
+	  b_if = fold_build2_loc (input_location, op == GT_EXPR ? GE_EXPR : LE_EXPR,
+				  logical_type_node, arrayse.expr, limit);
+
+	  gfc_add_modify (&ifblock, cond, b_if);
+	  ifbody2 = gfc_finish_block (&ifblock);
+
+	  gfc_start_block (&elseblock);
+	  b_else = fold_build2_loc (input_location, op, logical_type_node,
+				    arrayse.expr, limit);
+
+	  gfc_add_modify (&elseblock, cond, b_else);
+	  elsebody2 = gfc_finish_block (&elseblock);
+
+	  tmp = fold_build3_loc (input_location, COND_EXPR, logical_type_node,
+				 backse.expr, ifbody2, elsebody2);
+
+	  gfc_add_expr_to_block (&block, tmp);
+	}
+
+      cond = gfc_unlikely (cond, PRED_BUILTIN_EXPECT);
       ifbody = build3_v (COND_EXPR, cond, ifbody,
 			 build_empty_stmt (input_location));
     }
@@ -4924,11 +5059,35 @@ gfc_conv_intrinsic_minmaxloc (gfc_se * se, gfc_expr * expr, enum tree_code op)
 
       ifbody = gfc_finish_block (&ifblock);
 
-      cond = fold_build2_loc (input_location, op, logical_type_node,
-			      arrayse.expr, limit);
+      /* We switch to > or >= depending on the value of the BACK argument. */
+      {
+	tree ifbody2, elsebody2;
 
+	cond = gfc_create_var (logical_type_node, "cond");
+
+	gfc_start_block (&ifblock);
+	b_if = fold_build2_loc (input_location, op == GT_EXPR ? GE_EXPR : LE_EXPR,
+				logical_type_node, arrayse.expr, limit);
+
+	gfc_add_modify (&ifblock, cond, b_if);
+	ifbody2 = gfc_finish_block (&ifblock);
+
+	gfc_start_block (&elseblock);
+	b_else = fold_build2_loc (input_location, op, logical_type_node,
+				  arrayse.expr, limit);
+
+	gfc_add_modify (&elseblock, cond, b_else);
+	elsebody2 = gfc_finish_block (&elseblock);
+
+	tmp = fold_build3_loc (input_location, COND_EXPR, logical_type_node,
+			       backse.expr, ifbody2, elsebody2);
+      }
+
+      gfc_add_expr_to_block (&block, tmp);
+      cond = gfc_unlikely (cond, PRED_BUILTIN_EXPECT);
       tmp = build3_v (COND_EXPR, cond, ifbody,
 		      build_empty_stmt (input_location));
+
       gfc_add_expr_to_block (&block, tmp);
 
       if (maskss)

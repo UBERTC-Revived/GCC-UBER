@@ -2202,7 +2202,7 @@ riscv_expand_conditional_branch (rtx label, rtx_code code, rtx op0, rtx op1)
 
 /* Implement TARGET_FUNCTION_ARG_BOUNDARY.  Every parameter gets at
    least PARM_BOUNDARY bits of alignment, but will be given anything up
-   to STACK_BOUNDARY bits if the type requires it.  */
+   to PREFERRED_STACK_BOUNDARY bits if the type requires it.  */
 
 static unsigned int
 riscv_function_arg_boundary (machine_mode mode, const_tree type)
@@ -2215,7 +2215,7 @@ riscv_function_arg_boundary (machine_mode mode, const_tree type)
   else
     alignment = type ? TYPE_ALIGN (type) : GET_MODE_ALIGNMENT (mode);
 
-  return MIN (STACK_BOUNDARY, MAX (PARM_BOUNDARY, alignment));
+  return MIN (PREFERRED_STACK_BOUNDARY, MAX (PARM_BOUNDARY, alignment));
 }
 
 /* If MODE represents an argument that can be passed or returned in
@@ -3307,7 +3307,7 @@ riscv_compute_frame_info (void)
     }
 
   /* At the bottom of the frame are any outgoing stack arguments. */
-  offset = crtl->outgoing_args_size;
+  offset = RISCV_STACK_ALIGN (crtl->outgoing_args_size);
   /* Next are local stack variables. */
   offset += RISCV_STACK_ALIGN (get_frame_size ());
   /* The virtual frame pointer points above the local variables. */
@@ -3333,9 +3333,11 @@ riscv_compute_frame_info (void)
   frame->hard_frame_pointer_offset = offset;
   /* Above the hard frame pointer is the callee-allocated varags save area. */
   offset += RISCV_STACK_ALIGN (cfun->machine->varargs_size);
-  frame->arg_pointer_offset = offset;
   /* Next is the callee-allocated area for pretend stack arguments.  */
-  offset += crtl->args.pretend_args_size;
+  offset += RISCV_STACK_ALIGN (crtl->args.pretend_args_size);
+  /* Arg pointer must be below pretend args, but must be above alignment
+     padding.  */
+  frame->arg_pointer_offset = offset - crtl->args.pretend_args_size;
   frame->total_size = offset;
   /* Next points the incoming stack pointer and any incoming arguments. */
 
@@ -3505,8 +3507,9 @@ riscv_first_stack_step (struct riscv_frame_info *frame)
   if (SMALL_OPERAND (frame->total_size))
     return frame->total_size;
 
-  HOST_WIDE_INT min_first_step = frame->total_size - frame->fp_sp_offset;
-  HOST_WIDE_INT max_first_step = IMM_REACH / 2 - STACK_BOUNDARY / 8;
+  HOST_WIDE_INT min_first_step =
+    RISCV_STACK_ALIGN (frame->total_size - frame->fp_sp_offset);
+  HOST_WIDE_INT max_first_step = IMM_REACH / 2 - PREFERRED_STACK_BOUNDARY / 8;
   HOST_WIDE_INT min_second_step = frame->total_size - max_first_step;
   gcc_assert (min_first_step <= max_first_step);
 
@@ -4142,7 +4145,7 @@ riscv_option_override (void)
   riscv_stack_boundary = ABI_STACK_BOUNDARY;
   if (riscv_preferred_stack_boundary_arg)
     {
-      int min = ctz_hwi (MIN_STACK_BOUNDARY / 8);
+      int min = ctz_hwi (STACK_BOUNDARY / 8);
       int max = 8;
 
       if (!IN_RANGE (riscv_preferred_stack_boundary_arg, min, max))

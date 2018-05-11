@@ -2081,6 +2081,9 @@ final_1 (rtx_insn *first, FILE *file, int seen, int optimize_p)
 	    }
 	  else
 	    insn_current_address = INSN_ADDRESSES (INSN_UID (insn));
+	  /* final can be seen as an iteration of shorten_branches that
+	     does nothing (since a fixed point has already been reached).  */
+	  insn_last_address = insn_current_address;
 	}
 
       dump_basic_block_info (file, insn, start_to_bb, end_to_bb,
@@ -2213,14 +2216,13 @@ asm_show_source (const char *filename, int linenum)
   if (!filename)
     return;
 
-  int line_size;
-  const char *line = location_get_source_line (filename, linenum, &line_size);
+  char_span line = location_get_source_line (filename, linenum);
   if (!line)
     return;
 
   fprintf (asm_out_file, "%s %s:%i: ", ASM_COMMENT_START, filename, linenum);
-  /* "line" is not 0-terminated, so we must use line_size.  */
-  fwrite (line, 1, line_size, asm_out_file);
+  /* "line" is not 0-terminated, so we must use its length.  */
+  fwrite (line.get_buffer (), 1, line.length (), asm_out_file);
   fputc ('\n', asm_out_file);
 }
 

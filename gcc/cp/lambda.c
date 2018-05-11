@@ -554,13 +554,13 @@ add_capture (tree lambda, tree id, tree orig_init, bool by_reference_p,
   else if (!dependent_type_p (type)
 	   && variably_modified_type_p (type, NULL_TREE))
     {
-      error ("capture of variable-size type %qT that is not an N3639 array "
+      sorry ("capture of variably-modified type %qT that is not an N3639 array "
 	     "of runtime bound", type);
       if (TREE_CODE (type) == ARRAY_TYPE
 	  && variably_modified_type_p (TREE_TYPE (type), NULL_TREE))
 	inform (input_location, "because the array element type %qT has "
 		"variable size", TREE_TYPE (type));
-      type = error_mark_node;
+      return error_mark_node;
     }
   else
     {
@@ -743,9 +743,7 @@ lambda_expr_this_capture (tree lambda, bool add_capture_p)
     add_capture_p = false;
 
   /* Try to default capture 'this' if we can.  */
-  if (!this_capture
-      && (!add_capture_p
-          || LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (lambda) != CPLD_NONE))
+  if (!this_capture)
     {
       tree lambda_stack = NULL_TREE;
       tree init = NULL_TREE;
@@ -756,9 +754,15 @@ lambda_expr_this_capture (tree lambda, bool add_capture_p)
            3. a non-default capturing lambda function.  */
       for (tree tlambda = lambda; ;)
 	{
-          lambda_stack = tree_cons (NULL_TREE,
-                                    tlambda,
-                                    lambda_stack);
+	  if (add_capture_p
+	      && LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (tlambda) == CPLD_NONE)
+	    /* tlambda won't let us capture 'this'.  */
+	    break;
+
+	  if (add_capture_p)
+	    lambda_stack = tree_cons (NULL_TREE,
+				      tlambda,
+				      lambda_stack);
 
 	  tree closure = LAMBDA_EXPR_CLOSURE (tlambda);
 	  tree containing_function
@@ -807,10 +811,6 @@ lambda_expr_this_capture (tree lambda, bool add_capture_p)
 	      init = LAMBDA_EXPR_THIS_CAPTURE (tlambda);
 	      break;
 	    }
-
-	  if (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (tlambda) == CPLD_NONE)
-	    /* An outer lambda won't let us capture 'this'.  */
-	    break;
 	}
 
       if (init)
@@ -1176,6 +1176,7 @@ maybe_add_lambda_conv_op (tree type)
   tree thistype = cp_build_qualified_type (type, TYPE_QUAL_CONST);
   tree fntype = build_method_type_directly (thistype, rettype, void_list_node);
   tree convfn = build_lang_decl (FUNCTION_DECL, name, fntype);
+  SET_DECL_LANGUAGE (convfn, lang_cplusplus);
   tree fn = convfn;
   DECL_SOURCE_LOCATION (fn) = DECL_SOURCE_LOCATION (callop);
   SET_DECL_ALIGN (fn, MINIMUM_METHOD_BOUNDARY);
@@ -1208,6 +1209,7 @@ maybe_add_lambda_conv_op (tree type)
 
   name = get_identifier ("_FUN");
   tree statfn = build_lang_decl (FUNCTION_DECL, name, stattype);
+  SET_DECL_LANGUAGE (statfn, lang_cplusplus);
   fn = statfn;
   DECL_SOURCE_LOCATION (fn) = DECL_SOURCE_LOCATION (callop);
   grokclassfn (type, fn, NO_SPECIAL);

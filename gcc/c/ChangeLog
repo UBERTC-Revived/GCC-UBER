@@ -1,3 +1,49 @@
+2018-05-10  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/85662
+	* c-fold.c (c_fully_fold_internal): Use fold_offsetof rather than
+	fold_offsetof_1, pass TREE_TYPE (expr) as TYPE to it and drop the
+	fold_convert_loc.
+	* c-typeck.c (build_unary_op): Use fold_offsetof rather than
+	fold_offsetof_1, pass argtype as TYPE to it and drop the
+	fold_convert_loc.
+
+2018-05-02  David Pagan  <dave.pagan@oracle.com>
+
+	PR c/30552
+	* c-decl.c (old_style_parameter_scope): New function.
+	* c-parser.c (c_parser_postfix_expression): Check for statement
+	expressions in old-style function parameter list declarations.
+	* c-parser.h (old_style_parameter_scope): New extern declaration.
+
+2018-04-25  Jakub Jelinek  <jakub@redhat.com>
+
+	PR sanitizer/84307
+	* c-decl.c (build_compound_literal): Call pushdecl (decl) even when
+	it is not TREE_STATIC.
+	* c-typeck.c (c_mark_addressable) <case COMPOUND_LITERAL_EXPR>: Mark
+	not just the COMPOUND_LITERAL_EXPR node itself addressable, but also
+	its COMPOUND_LITERAL_EXPR_DECL.
+
+2018-03-21  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-parser.c (c_parser_postfix_expression): For __builtin_tgmath
+	where all functions return the same _FloatN or _FloatNx type,
+	treat integer types as _Float64 instead of double.
+
+2018-03-21  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/84999
+	* c-typeck.c (build_binary_op): If c_common_type_for_size fails when
+	building vector comparison, diagnose it and return error_mark_node.
+
+2018-03-15  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/84853
+	* c-typeck.c (build_binary_op) <case RSHIFT_EXPR, case LSHIFT_EXPR>:
+	If code1 is INTEGER_TYPE, only allow code0 VECTOR_TYPE if it has
+	INTEGER_TYPE element type.
+
 2018-03-13  David Pagan  <dave.pagan@oracle.com>
 
 	PR c/46921

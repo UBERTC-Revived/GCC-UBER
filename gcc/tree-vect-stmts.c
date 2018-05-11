@@ -182,6 +182,17 @@ create_array_ref (tree type, tree ptr, tree alias_ptr_type)
   return mem_ref;
 }
 
+/* Add a clobber of variable VAR to the vectorization of STMT.
+   Emit the clobber before *GSI.  */
+
+static void
+vect_clobber_variable (gimple *stmt, gimple_stmt_iterator *gsi, tree var)
+{
+  tree clobber = build_clobber (TREE_TYPE (var));
+  gimple *new_stmt = gimple_build_assign (var, clobber);
+  vect_finish_stmt_generation (stmt, new_stmt, gsi);
+}
+
 /* Utility functions used by vect_mark_stmts_to_be_vectorized.  */
 
 /* Function vect_mark_relevant.
@@ -4128,12 +4139,7 @@ vectorizable_simd_clone_call (gimple *stmt, gimple_stmt_iterator *gsi,
 		}
 
 	      if (ratype)
-		{
-		  tree clobber = build_constructor (ratype, NULL);
-		  TREE_THIS_VOLATILE (clobber) = 1;
-		  new_stmt = gimple_build_assign (new_temp, clobber);
-		  vect_finish_stmt_generation (stmt, new_stmt, gsi);
-		}
+		vect_clobber_variable (stmt, gsi, new_temp);
 	      continue;
 	    }
 	  else if (simd_clone_subparts (vectype) > nunits)
@@ -4156,10 +4162,7 @@ vectorizable_simd_clone_call (gimple *stmt, gimple_stmt_iterator *gsi,
 		      CONSTRUCTOR_APPEND_ELT (ret_ctor_elts, NULL_TREE,
 					      gimple_assign_lhs (new_stmt));
 		    }
-		  tree clobber = build_constructor (ratype, NULL);
-		  TREE_THIS_VOLATILE (clobber) = 1;
-		  new_stmt = gimple_build_assign (new_temp, clobber);
-		  vect_finish_stmt_generation (stmt, new_stmt, gsi);
+		  vect_clobber_variable (stmt, gsi, new_temp);
 		}
 	      else
 		CONSTRUCTOR_APPEND_ELT (ret_ctor_elts, NULL_TREE, new_temp);
@@ -4186,11 +4189,7 @@ vectorizable_simd_clone_call (gimple *stmt, gimple_stmt_iterator *gsi,
 	      new_stmt
 		= gimple_build_assign (make_ssa_name (vec_dest), t);
 	      vect_finish_stmt_generation (stmt, new_stmt, gsi);
-	      tree clobber = build_constructor (ratype, NULL);
-	      TREE_THIS_VOLATILE (clobber) = 1;
-	      vect_finish_stmt_generation (stmt,
-					   gimple_build_assign (new_temp,
-								clobber), gsi);
+	      vect_clobber_variable (stmt, gsi, new_temp);
 	    }
 	}
 
@@ -5923,14 +5922,33 @@ vectorizable_operation (gimple *stmt, gimple_stmt_iterator *gsi,
       /* Handle uses.  */
       if (j == 0)
 	{
-	  if (op_type == binary_op || op_type == ternary_op)
+	  if (op_type == binary_op)
 	    vect_get_vec_defs (op0, op1, stmt, &vec_oprnds0, &vec_oprnds1,
 			       slp_node);
+	  else if (op_type == ternary_op)
+	    {
+	      if (slp_node)
+		{
+		  auto_vec<tree> ops(3);
+		  ops.quick_push (op0);
+		  ops.quick_push (op1);
+		  ops.quick_push (op2);
+		  auto_vec<vec<tree> > vec_defs(3);
+		  vect_get_slp_defs (ops, slp_node, &vec_defs);
+		  vec_oprnds0 = vec_defs[0];
+		  vec_oprnds1 = vec_defs[1];
+		  vec_oprnds2 = vec_defs[2];
+		}
+	      else
+		{
+		  vect_get_vec_defs (op0, op1, stmt, &vec_oprnds0, &vec_oprnds1,
+				     NULL);
+		  vect_get_vec_defs (op2, NULL_TREE, stmt, &vec_oprnds2, NULL,
+				     NULL);
+		}
+	    }
 	  else
 	    vect_get_vec_defs (op0, NULL_TREE, stmt, &vec_oprnds0, NULL,
-			       slp_node);
-	  if (op_type == ternary_op)
-	    vect_get_vec_defs (op2, NULL_TREE, stmt, &vec_oprnds2, NULL,
 			       slp_node);
 	}
       else
@@ -6660,6 +6678,7 @@ vectorizable_store (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 						 group_el * elsz);
 		  newref = build2 (MEM_REF, ltype,
 				   running_off, this_off);
+		  vect_copy_ref_info (newref, DR_REF (first_dr));
 
 		  /* And store it to *running_off.  */
 		  assign = gimple_build_assign (newref, elem);
@@ -6893,8 +6912,15 @@ vectorizable_store (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 	{
 	  tree vec_array;
 
-	  /* Combine all the vectors into an array.  */
+	  /* Get an array into which we can store the individual vectors.  */
 	  vec_array = create_vector_array (vectype, vec_num);
+
+	  /* Invalidate the current contents of VEC_ARRAY.  This should
+	     become an RTL clobber too, which prevents the vector registers
+	     from being upward-exposed.  */
+	  vect_clobber_variable (stmt, gsi, vec_array);
+
+	  /* Store the individual vectors into the array.  */
 	  for (i = 0; i < vec_num; i++)
 	    {
 	      vec_oprnd = dr_chain[i];
@@ -6933,6 +6959,9 @@ vectorizable_store (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 	  gimple_call_set_nothrow (call, true);
 	  new_stmt = call;
 	  vect_finish_stmt_generation (stmt, new_stmt, gsi);
+
+	  /* Record that VEC_ARRAY is now dead.  */
+	  vect_clobber_variable (stmt, gsi, vec_array);
 	}
       else
 	{
@@ -7052,6 +7081,7 @@ vectorizable_store (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 		    TREE_TYPE (data_ref)
 		      = build_aligned_type (TREE_TYPE (data_ref),
 					    TYPE_ALIGN (elem_type));
+		  vect_copy_ref_info (data_ref, DR_REF (first_dr));
 		  new_stmt = gimple_build_assign (data_ref, vec_oprnd);
 		}
 	      vect_finish_stmt_generation (stmt, new_stmt, gsi);
@@ -7659,9 +7689,9 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 	    {
 	      tree this_off = build_int_cst (TREE_TYPE (alias_off),
 					     group_el * elsz + cst_offset);
-	      new_stmt = gimple_build_assign (make_ssa_name (ltype),
-					      build2 (MEM_REF, ltype,
-						      running_off, this_off));
+	      tree data_ref = build2 (MEM_REF, ltype, running_off, this_off);
+	      vect_copy_ref_info (data_ref, DR_REF (first_dr));
+	      new_stmt = gimple_build_assign (make_ssa_name (ltype), data_ref);
 	      vect_finish_stmt_generation (stmt, new_stmt, gsi);
 	      if (nloads > 1)
 		CONSTRUCTOR_APPEND_ELT (v, NULL_TREE,
@@ -8084,6 +8114,9 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 
 	  /* Record the mapping between SSA_NAMEs and statements.  */
 	  vect_record_grouped_load_vectors (stmt, dr_chain);
+
+	  /* Record that VEC_ARRAY is now dead.  */
+	  vect_clobber_variable (stmt, gsi, vec_array);
 	}
       else
 	{
@@ -8205,6 +8238,7 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 		    data_ref
 		      = build2 (MEM_REF, vectype, ptr,
 				build_int_cst (ref_type, 0));
+		    vect_copy_ref_info (data_ref, DR_REF (first_dr));
 		    vec_dest = vect_create_destination_var (scalar_dest,
 							    vectype);
 		    new_stmt = gimple_build_assign (vec_dest, data_ref);
@@ -8254,7 +8288,10 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 	      vec_dest = vect_create_destination_var (scalar_dest, vectype);
 	      /* DATA_REF is null if we've already built the statement.  */
 	      if (data_ref)
-		new_stmt = gimple_build_assign (vec_dest, data_ref);
+		{
+		  vect_copy_ref_info (data_ref, DR_REF (first_dr));
+		  new_stmt = gimple_build_assign (vec_dest, data_ref);
+		}
 	      new_temp = make_ssa_name (vec_dest, new_stmt);
 	      gimple_set_lhs (new_stmt, new_temp);
 	      vect_finish_stmt_generation (stmt, new_stmt, gsi);

@@ -1,3 +1,103 @@
+2018-05-11  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/85696
+	* c-omp.c (c_omp_predetermined_sharing): Return
+	OMP_CLAUSE_DEFAULT_SHARED for artificial vars with integral type.
+
+2018-05-11  Martin Liska  <mliska@suse.cz>
+
+        PR sanitizer/85556
+	* c-attribs.c (handle_no_sanitize_attribute): Iterate all
+	TREE_LIST values.
+
+2018-05-10  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/85662
+	* c-common.h (fold_offsetof_1): Removed.
+	(fold_offsetof): Add TYPE argument defaulted to size_type_node and
+	CTX argument defaulted to ERROR_MARK.
+	* c-common.c (fold_offsetof_1): Renamed to ...
+	(fold_offsetof): ... this.  Remove wrapper function.  Add TYPE
+	argument, convert the pointer constant to TYPE and use size_binop
+	with PLUS_EXPR instead of fold_build_pointer_plus if type is not
+	a pointer type.  Adjust recursive calls.
+
+2018-05-10  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR c++/85400
+	* c-attribs.c (handle_visibility_attribute): Do not set no_add_attrs.
+
+2018-05-07  Nathan Sidwell  <nathan@acm.org>
+
+	* c.opt (ffor-scope): Remove functionality, issue warning.
+
+2018-05-03  Nathan Sidwell  <nathan@acm.org>
+
+	* c.opt (ffriend-injection): Remove functionality, issue warning.
+
+2018-05-01  David Malcolm  <dmalcolm@redhat.com>
+
+	PR c/84258
+	* c-format.c (struct format_check_results): Add field
+	"number_non_char".
+	(check_format_info): Initialize it, and warn if encountered.
+	(check_format_arg): Distinguish between wide char and
+	everything else when detecting arrays of non-char.
+
+2018-04-30  David Malcolm  <dmalcolm@redhat.com>
+
+	* c-format.c (get_corrected_substring): Update for
+	location_get_source_line returning a char_span.  Use a char_span
+	when handling the prefix of the correction.
+	* c-indentation.c (get_visual_column): Update for
+	location_get_source_line returning a char_span.
+	(get_first_nws_vis_column): Likewise.
+
+2018-03-29  David Malcolm  <dmalcolm@redhat.com>
+
+	PR c++/84269
+	* known-headers.cc (get_stdlib_header_for_name): Add various names
+	from <assert.h>, <string.h>, and <memory.h>; add more names from
+	<stdio.h>.
+
+2018-03-27  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/85061
+	* c-common.c (fold_offsetof_1) <case COMPOUND_EXPR>: Assert that
+	get_base_address of the second operand is a VAR_P, rather than the
+	operand itself, and use gcc_checking_assert instead of gcc_assert.
+
+2018-03-23  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/85045
+	* c-pretty-print.c (c_pretty_printer::multiplicative_expression)
+	<case RDIV_EXPR>: Tweak condition.
+
+2018-03-20  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* c-ada-spec.c (pp_ada_tree_identifier): Deal specifically with _Bool.
+
+2018-03-16  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/84909
+	* c-warn.c (conversion_warning): Replace "to to" with "to" in
+	diagnostics.
+
+	PR c/84910
+	* c-warn.c (diagnose_mismatched_attributes): Remove trailing space from
+	diagnostics.
+
+2018-03-16  Richard Biener  <rguenther@suse.de>
+
+	PR c/84873
+	* c-gimplify.c (c_gimplify_expr): Revert previous change.  Instead
+	unshare the possibly folded expression.
+
+2018-03-15  Richard Biener  <rguenther@suse.de>
+
+	PR c/84873
+	* c-gimplify.c (c_gimplify_expr): Do not fold expressions.
+
 2018-03-13  Martin Sebor  <msebor@redhat.com>
 
 	PR tree-optimization/84725

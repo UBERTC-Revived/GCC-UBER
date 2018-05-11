@@ -933,92 +933,68 @@ tree_size (const_tree node)
     }
 }
 
-/* Record interesting allocation statistics for a tree node with CODE
-   and LENGTH.  */
+/* Return tree node kind based on tree CODE.  */
 
-static void
-record_node_allocation_statistics (enum tree_code code ATTRIBUTE_UNUSED,
-				   size_t length ATTRIBUTE_UNUSED)
+static tree_node_kind
+get_stats_node_kind (enum tree_code code)
 {
   enum tree_code_class type = TREE_CODE_CLASS (code);
-  tree_node_kind kind;
-
-  if (!GATHER_STATISTICS)
-    return;
 
   switch (type)
     {
     case tcc_declaration:  /* A decl node */
-      kind = d_kind;
-      break;
-
+      return d_kind;
     case tcc_type:  /* a type node */
-      kind = t_kind;
-      break;
-
+      return t_kind;
     case tcc_statement:  /* an expression with side effects */
-      kind = s_kind;
-      break;
-
+      return s_kind;
     case tcc_reference:  /* a reference */
-      kind = r_kind;
-      break;
-
+      return r_kind;
     case tcc_expression:  /* an expression */
     case tcc_comparison:  /* a comparison expression */
     case tcc_unary:  /* a unary arithmetic expression */
     case tcc_binary:  /* a binary arithmetic expression */
-      kind = e_kind;
-      break;
-
+      return e_kind;
     case tcc_constant:  /* a constant */
-      kind = c_kind;
-      break;
-
+      return c_kind;
     case tcc_exceptional:  /* something random, like an identifier.  */
       switch (code)
 	{
 	case IDENTIFIER_NODE:
-	  kind = id_kind;
-	  break;
-
+	  return id_kind;
 	case TREE_VEC:
-	  kind = vec_kind;
-	  break;
-
+	  return vec_kind;
 	case TREE_BINFO:
-	  kind = binfo_kind;
-	  break;
-
+	  return binfo_kind;
 	case SSA_NAME:
-	  kind = ssa_name_kind;
-	  break;
-
+	  return ssa_name_kind;
 	case BLOCK:
-	  kind = b_kind;
-	  break;
-
+	  return b_kind;
 	case CONSTRUCTOR:
-	  kind = constr_kind;
-	  break;
-
+	  return constr_kind;
 	case OMP_CLAUSE:
-	  kind = omp_clause_kind;
-	  break;
-
+	  return omp_clause_kind;
 	default:
-	  kind = x_kind;
-	  break;
+	  return x_kind;
 	}
       break;
-
     case tcc_vl_exp:
-      kind = e_kind;
-      break;
-
+      return e_kind;
     default:
       gcc_unreachable ();
     }
+}
+
+/* Record interesting allocation statistics for a tree node with CODE
+   and LENGTH.  */
+
+static void
+record_node_allocation_statistics (enum tree_code code, size_t length)
+{
+  if (!GATHER_STATISTICS)
+    return;
+
+  tree_node_kind kind = get_stats_node_kind (code);
 
   tree_code_counts[(int) code]++;
   tree_node_counts[(int) kind]++;
@@ -1157,9 +1133,15 @@ free_node (tree node)
   enum tree_code code = TREE_CODE (node);
   if (GATHER_STATISTICS)
     {
+      enum tree_node_kind kind = get_stats_node_kind (code);
+
+      gcc_checking_assert (tree_code_counts[(int) TREE_CODE (node)] != 0);
+      gcc_checking_assert (tree_node_counts[(int) kind] != 0);
+      gcc_checking_assert (tree_node_sizes[(int) kind] >= tree_size (node));
+
       tree_code_counts[(int) TREE_CODE (node)]--;
-      tree_node_counts[(int) t_kind]--;
-      tree_node_sizes[(int) t_kind] -= tree_size (node);
+      tree_node_counts[(int) kind]--;
+      tree_node_sizes[(int) kind] -= tree_size (node);
     }
   if (CODE_CONTAINS_STRUCT (code, TS_CONSTRUCTOR))
     vec_free (CONSTRUCTOR_ELTS (node));
@@ -2075,6 +2057,16 @@ build_constructor_va (tree type, int nelts, ...)
     }
   va_end (p);
   return build_constructor (type, v);
+}
+
+/* Return a node of type TYPE for which TREE_CLOBBER_P is true.  */
+
+tree
+build_clobber (tree type)
+{
+  tree clobber = build_constructor (type, NULL);
+  TREE_THIS_VOLATILE (clobber) = true;
+  return clobber;
 }
 
 /* Return a new FIXED_CST node whose type is TYPE and value is F.  */
@@ -5539,7 +5531,8 @@ find_decls_types_r (tree *tp, int *ws, void *data)
 	  tree tem;
 	  FOR_EACH_VEC_ELT (*BINFO_BASE_BINFOS (TYPE_BINFO (t)), i, tem)
 	    fld_worklist_push (TREE_TYPE (tem), fld);
-	  fld_worklist_push (BINFO_VIRTUALS (TYPE_BINFO (t)), fld);
+	  fld_worklist_push (BINFO_TYPE (TYPE_BINFO (t)), fld);
+	  fld_worklist_push (BINFO_VTABLE (TYPE_BINFO (t)), fld);
 	}
       if (RECORD_OR_UNION_TYPE_P (t))
 	{
@@ -5558,6 +5551,8 @@ find_decls_types_r (tree *tp, int *ws, void *data)
 	      tem = TREE_CHAIN (tem);
 	    }
 	}
+      if (FUNC_OR_METHOD_TYPE_P (t))
+	fld_worklist_push (TYPE_METHOD_BASETYPE (t), fld);
 
       fld_worklist_push (TYPE_STUB_DECL (t), fld);
       *ws = 0;
@@ -5876,6 +5871,8 @@ free_lang_data (void)
 
   /* Reset diagnostic machinery.  */
   tree_diagnostics_defaults (global_dc);
+
+  rebuild_type_inheritance_graph ();
 
   return 0;
 }
@@ -10389,17 +10386,19 @@ build_common_builtin_nodes (void)
 	  *q = TOLOWER (*p);
 	*q = '\0';
 
+	/* For -ftrapping-math these should throw from a former
+	   -fnon-call-exception stmt.  */
 	built_in_names[mcode] = concat (prefix, "mul", mode_name_buf, "3",
 					NULL);
         local_define_builtin (built_in_names[mcode], ftype, mcode,
 			      built_in_names[mcode],
-			      ECF_CONST | ECF_NOTHROW | ECF_LEAF);
+			      ECF_CONST | ECF_LEAF);
 
 	built_in_names[dcode] = concat (prefix, "div", mode_name_buf, "3",
 					NULL);
         local_define_builtin (built_in_names[dcode], ftype, dcode,
 			      built_in_names[dcode],
-			      ECF_CONST | ECF_NOTHROW | ECF_LEAF);
+			      ECF_CONST | ECF_LEAF);
       }
   }
 
@@ -13053,7 +13052,7 @@ verify_type_variant (const_tree t, tree tv)
   do {									    \
     if (flag (tv) != flag (t))						    \
       {									    \
-	error ("type variant differs by " #flag ".");			    \
+	error ("type variant differs by %s", #flag);			    \
 	debug_tree (tv);						    \
 	return false;							    \
       }									    \

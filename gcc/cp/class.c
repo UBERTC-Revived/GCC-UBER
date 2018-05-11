@@ -370,6 +370,15 @@ build_base_path (enum tree_code code,
       goto indout;
     }
 
+  if (!COMPLETE_TYPE_P (probe))
+    {
+      if (complain & tf_error)
+	error ("cannot convert from %qT to base class %qT because %qT is "
+	       "incomplete", BINFO_TYPE (d_binfo), BINFO_TYPE (binfo),
+	       BINFO_TYPE (d_binfo));
+      return error_mark_node;
+    }
+
   /* If we're in an NSDMI, we don't have the full constructor context yet
      that we need for converting to a virtual base, so just build a stub
      CONVERT_EXPR and expand it later in bot_replace.  */
@@ -2479,19 +2488,20 @@ update_vtable_entry_for_fn (tree t, tree binfo, tree fn, tree* virtuals,
 	     order.  Of course it is lame that we have to repeat the
 	     search here anyway -- we should really be caching pieces
 	     of the vtable and avoiding this repeated work.  */
-	  tree thunk_binfo, base_binfo;
+	  tree thunk_binfo = NULL_TREE;
+	  tree base_binfo = TYPE_BINFO (base_return);
 
 	  /* Find the base binfo within the overriding function's
 	     return type.  We will always find a thunk_binfo, except
 	     when the covariancy is invalid (which we will have
 	     already diagnosed).  */
-	  for (base_binfo = TYPE_BINFO (base_return),
-	       thunk_binfo = TYPE_BINFO (over_return);
-	       thunk_binfo;
-	       thunk_binfo = TREE_CHAIN (thunk_binfo))
-	    if (SAME_BINFO_TYPE_P (BINFO_TYPE (thunk_binfo),
-				   BINFO_TYPE (base_binfo)))
-	      break;
+	  if (base_binfo)
+	    for (thunk_binfo = TYPE_BINFO (over_return); thunk_binfo;
+		 thunk_binfo = TREE_CHAIN (thunk_binfo))
+	      if (SAME_BINFO_TYPE_P (BINFO_TYPE (thunk_binfo),
+				     BINFO_TYPE (base_binfo)))
+		break;
+	  gcc_assert (thunk_binfo || errorcount);
 
 	  /* See if virtual inheritance is involved.  */
 	  for (virtual_offset = thunk_binfo;
@@ -2869,9 +2879,7 @@ warn_hidden (tree t)
 static void
 finish_struct_anon_r (tree field, bool complain)
 {
-  bool is_union = TREE_CODE (TREE_TYPE (field)) == UNION_TYPE;
-  tree elt = TYPE_FIELDS (TREE_TYPE (field));
-  for (; elt; elt = DECL_CHAIN (elt))
+  for (tree elt = TYPE_FIELDS (TREE_TYPE (field)); elt; elt = DECL_CHAIN (elt))
     {
       /* We're generally only interested in entities the user
 	 declared, but we also find nested classes by noticing
@@ -2885,50 +2893,34 @@ finish_struct_anon_r (tree field, bool complain)
 	      || TYPE_UNNAMED_P (TREE_TYPE (elt))))
 	continue;
 
-      if (TREE_CODE (elt) != FIELD_DECL)
+      if (complain
+	  && (TREE_CODE (elt) != FIELD_DECL
+	      || (TREE_PRIVATE (elt) || TREE_PROTECTED (elt))))
 	{
 	  /* We already complained about static data members in
 	     finish_static_data_member_decl.  */
-	  if (complain && !VAR_P (elt))
+	  if (!VAR_P (elt)
+	      && permerror (DECL_SOURCE_LOCATION (elt),
+			    TREE_CODE (TREE_TYPE (field)) == UNION_TYPE
+			    ? "%q#D invalid; an anonymous union may "
+			    "only have public non-static data members"
+			    : "%q#D invalid; an anonymous struct may "
+			    "only have public non-static data members", elt))
 	    {
-	      if (is_union)
-		permerror (DECL_SOURCE_LOCATION (elt),
-			   "%q#D invalid; an anonymous union can "
-			   "only have non-static data members", elt);
-	      else
-		permerror (DECL_SOURCE_LOCATION (elt),
-			   "%q#D invalid; an anonymous struct can "
-			   "only have non-static data members", elt);
-	    }
-	  continue;
-	}
-
-      if (complain)
-	{
-	  if (TREE_PRIVATE (elt))
-	    {
-	      if (is_union)
-		permerror (DECL_SOURCE_LOCATION (elt),
-			   "private member %q#D in anonymous union", elt);
-	      else
-		permerror (DECL_SOURCE_LOCATION (elt),
-			   "private member %q#D in anonymous struct", elt);
-	    }
-	  else if (TREE_PROTECTED (elt))
-	    {
-	      if (is_union)
-		permerror (DECL_SOURCE_LOCATION (elt),
-			   "protected member %q#D in anonymous union", elt);
-	      else
-		permerror (DECL_SOURCE_LOCATION (elt),
-			   "protected member %q#D in anonymous struct", elt);
+	      static bool hint;
+	      if (flag_permissive && !hint)
+		{
+		  hint = true;
+		  inform (DECL_SOURCE_LOCATION (elt),
+			  "this flexibility is deprecated and will be removed");
+		}
 	    }
 	}
 
       TREE_PRIVATE (elt) = TREE_PRIVATE (field);
       TREE_PROTECTED (elt) = TREE_PROTECTED (field);
 
-      /* Recurse into the anonymous aggregates to handle correctly
+      /* Recurse into the anonymous aggregates to correctly handle
 	 access control (c++/24926):
 
 	 class A {
@@ -5034,7 +5026,7 @@ vbase_has_user_provided_move_assign (tree type)
     for (ovl_iterator iter (get_class_binding_direct
 			    (type, assign_op_identifier));
 	 iter; ++iter)
-      if (!DECL_ARTIFICIAL (*iter) && move_fn_p (*iter))
+      if (user_provided_p (*iter) && move_fn_p (*iter))
 	return true;
 
   /* Do any of its bases?  */
@@ -7988,6 +7980,11 @@ instantiate_type (tree lhstype, tree rhs, tsubst_flags_t complain)
 	}
     }
 
+  /* If we instantiate a template, and it is a A ?: C expression
+     with omitted B, look through the SAVE_EXPR.  */
+  if (TREE_CODE (rhs) == SAVE_EXPR)
+    rhs = TREE_OPERAND (rhs, 0);
+
   if (BASELINK_P (rhs))
     {
       access_path = BASELINK_ACCESS_BINFO (rhs);
@@ -8002,11 +7999,6 @@ instantiate_type (tree lhstype, tree rhs, tsubst_flags_t complain)
 	error ("not enough type information");
       return error_mark_node;
     }
-
-  /* If we instantiate a template, and it is a A ?: C expression
-     with omitted B, look through the SAVE_EXPR.  */
-  if (TREE_CODE (rhs) == SAVE_EXPR)
-    rhs = TREE_OPERAND (rhs, 0);
 
   /* There are only a few kinds of expressions that may have a type
      dependent on overload resolution.  */

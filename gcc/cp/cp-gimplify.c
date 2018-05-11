@@ -1294,16 +1294,20 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
 	  }
 	if (block)
 	  {
-	    tree using_directive;
-	    gcc_assert (TREE_OPERAND (stmt, 0));
+	    tree decl = TREE_OPERAND (stmt, 0);
+	    gcc_assert (decl);
 
-	    using_directive = make_node (IMPORTED_DECL);
-	    TREE_TYPE (using_directive) = void_type_node;
+	    if (undeduced_auto_decl (decl))
+	      /* Omit from the GENERIC, the back-end can't handle it.  */;
+	    else
+	      {
+		tree using_directive = make_node (IMPORTED_DECL);
+		TREE_TYPE (using_directive) = void_type_node;
 
-	    IMPORTED_DECL_ASSOCIATED_DECL (using_directive)
-	      = TREE_OPERAND (stmt, 0);
-	    DECL_CHAIN (using_directive) = BLOCK_VARS (block);
-	    BLOCK_VARS (block) = using_directive;
+		IMPORTED_DECL_ASSOCIATED_DECL (using_directive) = decl;
+		DECL_CHAIN (using_directive) = BLOCK_VARS (block);
+		BLOCK_VARS (block) = using_directive;
+	      }
 	  }
 	/* The USING_STMT won't appear in GENERIC.  */
 	*stmt_p = build1 (NOP_EXPR, void_type_node, integer_zero_node);
@@ -1513,6 +1517,36 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
 		       == REFERENCE_TYPE))
 	    *walk_subtrees = 0;
 	}
+      /* Fall through.  */
+    case AGGR_INIT_EXPR:
+      /* For calls to a multi-versioned function, overload resolution
+	 returns the function with the highest target priority, that is,
+	 the version that will checked for dispatching first.  If this
+	 version is inlinable, a direct call to this version can be made
+	 otherwise the call should go through the dispatcher.  */
+      {
+	tree fn = cp_get_callee_fndecl_nofold (stmt);
+	if (fn && DECL_FUNCTION_VERSIONED (fn)
+	    && (current_function_decl == NULL
+		|| !targetm.target_option.can_inline_p (current_function_decl,
+							fn)))
+	  if (tree dis = get_function_version_dispatcher (fn))
+	    {
+	      mark_versions_used (dis);
+	      dis = build_address (dis);
+	      if (TREE_CODE (stmt) == CALL_EXPR)
+		CALL_EXPR_FN (stmt) = dis;
+	      else
+		AGGR_INIT_EXPR_FN (stmt) = dis;
+	    }
+      }
+      break;
+
+    case TARGET_EXPR:
+      if (TARGET_EXPR_INITIAL (stmt)
+	  && TREE_CODE (TARGET_EXPR_INITIAL (stmt)) == CONSTRUCTOR
+	  && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (TARGET_EXPR_INITIAL (stmt)))
+	TARGET_EXPR_NO_ELIDE (stmt) = 1;
       break;
 
     default:
@@ -1923,7 +1957,7 @@ cxx_omp_const_qual_no_mutable (tree decl)
 /* True if OpenMP sharing attribute of DECL is predetermined.  */
 
 enum omp_clause_default_kind
-cxx_omp_predetermined_sharing (tree decl)
+cxx_omp_predetermined_sharing_1 (tree decl)
 {
   /* Static data members are predetermined shared.  */
   if (TREE_STATIC (decl))
@@ -1936,6 +1970,32 @@ cxx_omp_predetermined_sharing (tree decl)
   /* Const qualified vars having no mutable member are predetermined
      shared.  */
   if (cxx_omp_const_qual_no_mutable (decl))
+    return OMP_CLAUSE_DEFAULT_SHARED;
+
+  return OMP_CLAUSE_DEFAULT_UNSPECIFIED;
+}
+
+/* Likewise, but also include the artificial vars.  We don't want to
+   disallow the artificial vars being mentioned in explicit clauses,
+   as we use artificial vars e.g. for loop constructs with random
+   access iterators other than pointers, but during gimplification
+   we want to treat them as predetermined.  */
+
+enum omp_clause_default_kind
+cxx_omp_predetermined_sharing (tree decl)
+{
+  enum omp_clause_default_kind ret = cxx_omp_predetermined_sharing_1 (decl);
+  if (ret != OMP_CLAUSE_DEFAULT_UNSPECIFIED)
+    return ret;
+
+  /* Predetermine artificial variables holding integral values, those
+     are usually result of gimplify_one_sizepos or SAVE_EXPR
+     gimplification.  */
+  if (VAR_P (decl)
+      && DECL_ARTIFICIAL (decl)
+      && INTEGRAL_TYPE_P (TREE_TYPE (decl))
+      && !(DECL_LANG_SPECIFIC (decl)
+	   && DECL_OMP_PRIVATIZED_MEMBER (decl)))
     return OMP_CLAUSE_DEFAULT_SHARED;
 
   return OMP_CLAUSE_DEFAULT_UNSPECIFIED;
@@ -2181,6 +2241,28 @@ cp_fold (tree x)
       goto unary;
 
     case ADDR_EXPR:
+      loc = EXPR_LOCATION (x);
+      op0 = cp_fold_maybe_rvalue (TREE_OPERAND (x, 0), false);
+
+      /* Cope with user tricks that amount to offsetof.  */
+      if (op0 != error_mark_node
+	  && TREE_CODE (TREE_TYPE (op0)) != FUNCTION_TYPE
+	  && TREE_CODE (TREE_TYPE (op0)) != METHOD_TYPE)
+	{
+	  tree val = get_base_address (op0);
+	  if (val
+	      && INDIRECT_REF_P (val)
+	      && COMPLETE_TYPE_P (TREE_TYPE (val))
+	      && TREE_CONSTANT (TREE_OPERAND (val, 0)))
+	    {
+	      val = TREE_OPERAND (val, 0);
+	      STRIP_NOPS (val);
+	      if (TREE_CODE (val) == INTEGER_CST)
+		return fold_offsetof (op0, TREE_TYPE (x));
+	    }
+	}
+      goto finish_unary;
+
     case REALPART_EXPR:
     case IMAGPART_EXPR:
       rval_ops = false;
@@ -2198,6 +2280,7 @@ cp_fold (tree x)
       loc = EXPR_LOCATION (x);
       op0 = cp_fold_maybe_rvalue (TREE_OPERAND (x, 0), rval_ops);
 
+    finish_unary:
       if (op0 != TREE_OPERAND (x, 0))
 	{
 	  if (op0 == error_mark_node)
@@ -2469,7 +2552,13 @@ cp_fold (tree x)
 	      }
 	  }
 	if (nelts)
-	  x = build_constructor (TREE_TYPE (x), nelts);
+	  {
+	    x = build_constructor (TREE_TYPE (x), nelts);
+	    CONSTRUCTOR_PLACEHOLDER_BOUNDARY (x)
+	      = CONSTRUCTOR_PLACEHOLDER_BOUNDARY (org_x);
+	  }
+	if (VECTOR_TYPE_P (TREE_TYPE (x)))
+	  x = fold (x);
 	break;
       }
     case TREE_VEC:

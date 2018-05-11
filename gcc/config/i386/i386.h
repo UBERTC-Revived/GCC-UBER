@@ -183,10 +183,14 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define TARGET_MWAITX_P(x)	TARGET_ISA_MWAITX_P(x)
 #define TARGET_PKU	TARGET_ISA_PKU
 #define TARGET_PKU_P(x)	TARGET_ISA_PKU_P(x)
-#define TARGET_IBT	TARGET_ISA_IBT
-#define TARGET_IBT_P(x)	TARGET_ISA_IBT_P(x)
 #define TARGET_SHSTK	TARGET_ISA_SHSTK
 #define TARGET_SHSTK_P(x)	TARGET_ISA_SHSTK_P(x)
+#define TARGET_MOVDIRI	TARGET_ISA_MOVDIRI
+#define TARGET_MOVDIRI_P(x) TARGET_ISA_MOVDIRI_P(x)
+#define TARGET_MOVDIR64B	TARGET_ISA_MOVDIR64B
+#define TARGET_MOVDIR64B_P(x) TARGET_ISA_MOVDIR64B_P(x)
+#define TARGET_WAITPKG	TARGET_ISA_WAITPKG
+#define TARGET_WAITPKG_P(x)	TARGET_ISA_WAITPKG_P(x)
 
 #define TARGET_LP64	TARGET_ABI_64
 #define TARGET_LP64_P(x)	TARGET_ABI_64_P(x)
@@ -383,11 +387,14 @@ extern const struct processor_costs ix86_size_cost;
 #define TARGET_HASWELL (ix86_tune == PROCESSOR_HASWELL)
 #define TARGET_BONNELL (ix86_tune == PROCESSOR_BONNELL)
 #define TARGET_SILVERMONT (ix86_tune == PROCESSOR_SILVERMONT)
+#define TARGET_GOLDMONT (ix86_tune == PROCESSOR_GOLDMONT)
 #define TARGET_KNL (ix86_tune == PROCESSOR_KNL)
 #define TARGET_KNM (ix86_tune == PROCESSOR_KNM)
+#define TARGET_SKYLAKE (ix86_tune == PROCESSOR_SKYLAKE)
 #define TARGET_SKYLAKE_AVX512 (ix86_tune == PROCESSOR_SKYLAKE_AVX512)
 #define TARGET_CANNONLAKE (ix86_tune == PROCESSOR_CANNONLAKE)
-#define TARGET_ICELAKE (ix86_tune == PROCESSOR_ICELAKE)
+#define TARGET_ICELAKE_CLIENT (ix86_tune == PROCESSOR_ICELAKE_CLIENT)
+#define TARGET_ICELAKE_SERVER (ix86_tune == PROCESSOR_ICELAKE_SERVER)
 #define TARGET_INTEL (ix86_tune == PROCESSOR_INTEL)
 #define TARGET_GENERIC (ix86_tune == PROCESSOR_GENERIC)
 #define TARGET_AMDFAM10 (ix86_tune == PROCESSOR_AMDFAM10)
@@ -1715,7 +1722,7 @@ typedef struct ix86_args {
 
 /* Length in units of the trampoline for entering a nested function.  */
 
-#define TRAMPOLINE_SIZE (TARGET_64BIT ? 24 : 10)
+#define TRAMPOLINE_SIZE (TARGET_64BIT ? 28 : 14)
 
 /* Definitions for register eliminations.
 
@@ -1941,6 +1948,17 @@ do {							\
    After generation of rtl, the compiler makes no further distinction
    between pointers and any other objects of this machine mode.  */
 #define Pmode (ix86_pmode == PMODE_DI ? DImode : SImode)
+
+/* Supply a definition of STACK_SAVEAREA_MODE for emit_stack_save.
+   NONLOCAL needs space to save both shadow stack and stack pointers.
+
+   FIXME: We only need to save and restore stack pointer in ptr_mode.
+   But expand_builtin_setjmp_setup and expand_builtin_longjmp use Pmode
+   to save and restore stack pointer.  See
+   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=84150
+ */
+#define STACK_SAVEAREA_MODE(LEVEL)			\
+  ((LEVEL) == SAVE_NONLOCAL ? (TARGET_64BIT ? TImode : DImode) : Pmode)
 
 /* Specify the machine mode that bounds have.  */
 #define BNDmode (ix86_pmode == PMODE_DI ? BND64mode : BND32mode)
@@ -2264,11 +2282,14 @@ enum processor_type
   PROCESSOR_HASWELL,
   PROCESSOR_BONNELL,
   PROCESSOR_SILVERMONT,
+  PROCESSOR_GOLDMONT,
   PROCESSOR_KNL,
   PROCESSOR_KNM,
+  PROCESSOR_SKYLAKE,
   PROCESSOR_SKYLAKE_AVX512,
   PROCESSOR_CANNONLAKE,
-  PROCESSOR_ICELAKE,
+  PROCESSOR_ICELAKE_CLIENT,
+  PROCESSOR_ICELAKE_SERVER,
   PROCESSOR_INTEL,
   PROCESSOR_GEODE,
   PROCESSOR_K6,

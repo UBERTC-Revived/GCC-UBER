@@ -5575,11 +5575,15 @@ subst (rtx x, rtx from, rtx to, int in_dest, int in_cond, int unique_copy)
 		    x = gen_rtx_CLOBBER (mode, const0_rtx);
 		}
 	      else if (CONST_SCALAR_INT_P (new_rtx)
-		       && GET_CODE (x) == ZERO_EXTEND)
+		       && (GET_CODE (x) == ZERO_EXTEND
+			   || GET_CODE (x) == FLOAT
+			   || GET_CODE (x) == UNSIGNED_FLOAT))
 		{
-		  x = simplify_unary_operation (ZERO_EXTEND, GET_MODE (x),
-						new_rtx, GET_MODE (XEXP (x, 0)));
-		  gcc_assert (x);
+		  x = simplify_unary_operation (GET_CODE (x), GET_MODE (x),
+						new_rtx,
+						GET_MODE (XEXP (x, 0)));
+		  if (!x)
+		    return gen_rtx_CLOBBER (VOIDmode, const0_rtx);
 		}
 	      else
 		SUBST (XEXP (x, i), new_rtx);
@@ -14777,6 +14781,9 @@ distribute_links (struct insn_link *links)
 	     || GET_CODE (reg) == STRICT_LOW_PART
 	     || GET_CODE (reg) == SUBREG)
 	reg = XEXP (reg, 0);
+
+      if (reg == pc_rtx)
+	continue;
 
       /* A LOG_LINK is defined as being placed on the first insn that uses
 	 a register and points to the insn that sets the register.  Start
