@@ -3783,7 +3783,17 @@ expand_builtin_strcpy (tree exp, rtx target)
 		    src, destsize);
     }
 
-  return expand_builtin_strcpy_args (dest, src, target);
+  if (rtx ret = expand_builtin_strcpy_args (dest, src, target))
+    {
+      /* Check to see if the argument was declared attribute nonstring
+	 and if so, issue a warning since at this point it's not known
+	 to be nul-terminated.  */
+      tree fndecl = get_callee_fndecl (exp);
+      maybe_warn_nonstring_arg (fndecl, exp);
+      return ret;
+    }
+
+  return NULL_RTX;
 }
 
 /* Helper function to do the actual work for expand_builtin_strcpy.  The
@@ -4576,14 +4586,14 @@ expand_builtin_strcmp (tree exp, ATTRIBUTE_UNUSED rtx target)
 	}
     }
 
-  /* Check to see if the argument was declared attribute nonstring
-     and if so, issue a warning since at this point it's not known
-     to be nul-terminated.  */
   tree fndecl = get_callee_fndecl (exp);
-  maybe_warn_nonstring_arg (fndecl, exp);
-
   if (result)
     {
+      /* Check to see if the argument was declared attribute nonstring
+	 and if so, issue a warning since at this point it's not known
+	 to be nul-terminated.  */
+      maybe_warn_nonstring_arg (fndecl, exp);
+
       /* Return the value in the proper mode for this function.  */
       machine_mode mode = TYPE_MODE (TREE_TYPE (exp));
       if (GET_MODE (result) == mode)
@@ -4680,14 +4690,14 @@ expand_builtin_strncmp (tree exp, ATTRIBUTE_UNUSED rtx target,
 					 arg2_rtx, TREE_TYPE (len), arg3_rtx,
 					 MIN (arg1_align, arg2_align));
 
-  /* Check to see if the argument was declared attribute nonstring
-     and if so, issue a warning since at this point it's not known
-     to be nul-terminated.  */
   tree fndecl = get_callee_fndecl (exp);
-  maybe_warn_nonstring_arg (fndecl, exp);
-
   if (result)
     {
+      /* Check to see if the argument was declared attribute nonstring
+	 and if so, issue a warning since at this point it's not known
+	 to be nul-terminated.  */
+      maybe_warn_nonstring_arg (fndecl, exp);
+
       /* Return the value in the proper mode for this function.  */
       mode = TYPE_MODE (TREE_TYPE (exp));
       if (GET_MODE (result) == mode)
@@ -8340,21 +8350,6 @@ fold_builtin_abs (location_t loc, tree arg, tree type)
   return fold_build1_loc (loc, ABS_EXPR, type, arg);
 }
 
-/* Fold a call to fma, fmaf, or fmal with arguments ARG[012].  */
-
-static tree
-fold_builtin_fma (location_t loc, tree arg0, tree arg1, tree arg2, tree type)
-{
-  /* ??? Only expand to FMA_EXPR if it's directly supported.  */
-  if (validate_arg (arg0, REAL_TYPE)
-      && validate_arg (arg1, REAL_TYPE)
-      && validate_arg (arg2, REAL_TYPE)
-      && optab_handler (fma_optab, TYPE_MODE (type)) != CODE_FOR_nothing)
-    return fold_build3_loc (loc, FMA_EXPR, type, arg0, arg1, arg2);
-
-  return NULL_TREE;
-}
-
 /* Fold a call to builtin carg(a+bi) -> atan2(b,a).  */
 
 static tree
@@ -9259,10 +9254,6 @@ fold_builtin_3 (location_t loc, tree fndecl,
 
     CASE_FLT_FN (BUILT_IN_SINCOS):
       return fold_builtin_sincos (loc, arg0, arg1, arg2);
-
-    CASE_FLT_FN (BUILT_IN_FMA):
-    CASE_FLT_FN_FLOATN_NX (BUILT_IN_FMA):
-      return fold_builtin_fma (loc, arg0, arg1, arg2, type);
 
     CASE_FLT_FN (BUILT_IN_REMQUO):
       if (validate_arg (arg0, REAL_TYPE)

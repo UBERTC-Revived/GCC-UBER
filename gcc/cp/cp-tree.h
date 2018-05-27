@@ -59,9 +59,6 @@ public:
   cp_expr (tree value, location_t loc):
     m_value (value), m_loc (loc) {}
 
-  cp_expr (const cp_expr &other) :
-    m_value (other.m_value), m_loc (other.m_loc) {}
-
   /* Implicit conversions to tree.  */
   operator tree () const { return m_value; }
   tree & operator* () { return m_value; }
@@ -2783,6 +2780,12 @@ struct GTY(()) lang_decl {
 #define DECL_DELETING_DESTRUCTOR_P(NODE)		\
   (DECL_NAME (NODE) == deleting_dtor_identifier)
 
+/* Nonzero if either DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P or
+   DECL_MAYBE_IN_CHARGE_DESTRUCTOR_P is true of NODE.  */
+#define DECL_MAYBE_IN_CHARGE_CDTOR_P(NODE)              \
+  (DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P (NODE)            \
+   || DECL_MAYBE_IN_CHARGE_DESTRUCTOR_P (NODE))
+
 /* Nonzero if NODE (a FUNCTION_DECL) is a cloned constructor or
    destructor.  */
 #define DECL_CLONED_FUNCTION_P(NODE) (!!decl_cloned_function_p (NODE, true))
@@ -2800,8 +2803,7 @@ struct GTY(()) lang_decl {
   */
 #define FOR_EACH_CLONE(CLONE, FN)			\
   if (!(TREE_CODE (FN) == FUNCTION_DECL			\
-	&& (DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P (FN)	\
-	    || DECL_MAYBE_IN_CHARGE_DESTRUCTOR_P (FN))))\
+	&& DECL_MAYBE_IN_CHARGE_CDTOR_P (FN)))          \
     ;							\
   else							\
     for (CLONE = DECL_CHAIN (FN);			\
@@ -3621,8 +3623,7 @@ struct GTY(()) lang_decl {
 #define REFERENCE_REF_P(NODE)				\
   (INDIRECT_REF_P (NODE)				\
    && TREE_TYPE (TREE_OPERAND (NODE, 0))		\
-   && (TREE_CODE (TREE_TYPE (TREE_OPERAND ((NODE), 0)))	\
-       == REFERENCE_TYPE))
+   && TYPE_REF_P (TREE_TYPE (TREE_OPERAND ((NODE), 0))))
 
 /* True if NODE is a REFERENCE_TYPE which is OK to instantiate to be a
    reference to VLA type, because it's used for VLA capture.  */
@@ -4227,9 +4228,18 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
 /* Returns true if NODE is a pointer-to-data-member.  */
 #define TYPE_PTRDATAMEM_P(NODE)			\
   (TREE_CODE (NODE) == OFFSET_TYPE)
+
 /* Returns true if NODE is a pointer.  */
 #define TYPE_PTR_P(NODE)			\
   (TREE_CODE (NODE) == POINTER_TYPE)
+
+/* Returns true if NODE is a reference.  */
+#define TYPE_REF_P(NODE)			\
+  (TREE_CODE (NODE) == REFERENCE_TYPE)
+
+/* Returns true if NODE is a pointer or a reference.  */
+#define INDIRECT_TYPE_P(NODE)			\
+  (TYPE_PTR_P (NODE) || TYPE_REF_P (NODE))
 
 /* Returns true if NODE is an object type:
 
@@ -4240,7 +4250,7 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
 
    Keep these checks in ascending order, for speed.  */
 #define TYPE_OBJ_P(NODE)			\
-  (TREE_CODE (NODE) != REFERENCE_TYPE		\
+  (!TYPE_REF_P (NODE)				\
    && !VOID_TYPE_P (NODE)  		        \
    && TREE_CODE (NODE) != FUNCTION_TYPE		\
    && TREE_CODE (NODE) != METHOD_TYPE)
@@ -4253,7 +4263,7 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
 /* Returns true if NODE is a reference to an object.  Keep these checks
    in ascending tree code order.  */
 #define TYPE_REF_OBJ_P(NODE)					\
-  (TREE_CODE (NODE) == REFERENCE_TYPE && TYPE_OBJ_P (TREE_TYPE (NODE)))
+  (TYPE_REF_P (NODE) && TYPE_OBJ_P (TREE_TYPE (NODE)))
 
 /* Returns true if NODE is a pointer to an object, or a pointer to
    void.  Keep these checks in ascending tree code order.  */
@@ -4269,7 +4279,7 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
 
 /* Returns true if NODE is a reference to function type.  */
 #define TYPE_REFFN_P(NODE)				\
-  (TREE_CODE (NODE) == REFERENCE_TYPE			\
+  (TYPE_REF_P (NODE)					\
    && TREE_CODE (TREE_TYPE (NODE)) == FUNCTION_TYPE)
 
 /* Returns true if NODE is a pointer to member function type.  */
@@ -6097,6 +6107,7 @@ extern bool is_std_init_list			(tree);
 extern bool is_list_ctor			(tree);
 extern void validate_conversion_obstack		(void);
 extern void mark_versions_used			(tree);
+extern bool cp_warn_deprecated_use		(tree, tsubst_flags_t = tf_warning_or_error);
 extern tree get_function_version_dispatcher	(tree);
 
 /* in class.c */
@@ -6158,6 +6169,7 @@ extern bool trivial_default_constructor_is_constexpr (tree);
 extern bool type_has_constexpr_default_constructor (tree);
 extern bool type_has_virtual_destructor		(tree);
 extern bool classtype_has_move_assign_or_move_ctor_p (tree, bool user_declared);
+extern tree classtype_has_user_copy_or_dtor	(tree);
 extern bool type_build_ctor_call		(tree);
 extern bool type_build_dtor_call		(tree);
 extern void explain_non_literal_class		(tree);
@@ -7099,6 +7111,7 @@ extern tree ovl_scope				(tree);
 extern const char *cxx_printable_name		(tree, int);
 extern const char *cxx_printable_name_translate	(tree, int);
 extern tree canonical_eh_spec			(tree);
+extern tree build_cp_fntype_variant		(tree, cp_ref_qualifier, tree, bool);
 extern tree build_exception_variant		(tree, tree);
 extern tree bind_template_template_parm		(tree, tree);
 extern tree array_type_nelts_total		(tree);
@@ -7150,7 +7163,6 @@ extern tree cxx_copy_lang_qualifiers		(const_tree, const_tree);
 
 extern void cxx_print_statistics		(void);
 extern bool maybe_warn_zero_as_null_pointer_constant (tree, location_t);
-extern void cp_warn_deprecated_use		(tree);
 
 /* in ptree.c */
 extern void cxx_print_xnode			(FILE *, tree, int);
@@ -7258,7 +7270,8 @@ extern tree build_ptrmemfunc			(tree, tree, int, bool,
 extern int cp_type_quals			(const_tree);
 extern int type_memfn_quals			(const_tree);
 extern cp_ref_qualifier type_memfn_rqual	(const_tree);
-extern tree apply_memfn_quals			(tree, cp_cv_quals, cp_ref_qualifier);
+extern tree apply_memfn_quals			(tree, cp_cv_quals,
+						 cp_ref_qualifier = REF_QUAL_NONE);
 extern bool cp_has_mutable_p			(const_tree);
 extern bool at_least_as_qualified_p		(const_tree, const_tree);
 extern void cp_apply_type_quals_to_decl		(int, tree);

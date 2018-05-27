@@ -1,3 +1,377 @@
+2018-05-27  François Dumont  <fdumont@gcc.gnu.org>
+
+	* include/bits/stl_tree.h (_Rb_tree_impl(_Node_allocator&&)): New.
+	(_Rb_tree(const allocator_type&)): Use latter.
+	* include/bits/stl_map.h (map(const allocator_type&)): Likewise.
+	(map(initializer_list<value_type>, const allocator_type&)): Likewise.
+	(map(_InputIterator, _InputIterator, const allocator_type&)): Likewise.
+	* include/bits/stl_multimap.h
+	(multimap(const allocator_type&)): Likewise.
+	(multimap(initializer_list<value_type>, const allocator_type&)):
+	Likewise.
+	(multimap(_InputIterator, _InputIterator, const allocator_type&)):
+	Likewise.
+	* include/bits/stl_set.h (set(const allocator_type&)): Likewise.
+	(set(initializer_list<value_type>, const allocator_type&)): Likewise.
+	(set(_InputIterator, _InputIterator, const allocator_type&)): Likewise.
+	* include/bits/stl_multiset.h
+	(multiset(const allocator_type&)): Likewise.
+	(multiset(initializer_list<value_type>, const allocator_type&)):
+	Likewise.
+	(multiset(_InputIterator, _InputIterator, const allocator_type&)):
+	Likewise.
+
+2018-05-25  François Dumont  <fdumont@gcc.gnu.org>
+
+	PR libstdc++/85768
+	* src/c++11/debug.cc: Remove backtrace usage.
+
+2018-05-24  Maya Rashish  <coypu@sdf.org>
+
+	PR target/85904
+	* crossconfig.m4: Test for aligned_alloc on netbsd.
+	* configure: Regenerate.
+
+2018-05-24  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/69769
+	PR libstdc++/85886
+	* include/bits/atomic_base.h (__atomic_base::value_type)
+	(__atomic_base::difference_type): Add new typedefs.
+	* include/std/atomic (atomic<bool>::value_type, atomic<T>::value_type)
+	(atomic<T*>::value_type, atomic<T*>::difference_type): Likewise.
+	(atomic<T*>::operator++, atomic<T*>::operator--)
+	(atomic<T*>::operator+=, atomic<T*>::operator-=)
+	(atomic<T*>::fetch_add, atomic<T*>::fetch_sub): Add static assertion
+	to enforce C++17 requirement on pointer arithmetic.
+	(__atomic_val_t, __atomic_diff_t): New alias templates.
+	(atomic_init, atomic_store_explicit, atomic_exchange_explicit)
+	(atomic_compare_exchange_weak_explicit)
+	(atomic_compare_exchange_strong_explicit, atomic_store)
+	(atomic_exchange, atomic_compare_exchange_weak)
+	(atomic_compare_exchange_strong): Use __atomic_val_t to make
+	scalar parameters be non-deduced contexts.
+	(atomic_fetch_add_explicit, atomic_fetch_sub_explicit)
+	(atomic_fetch_add, atomic_fetch_sub): Change first parameter to be
+	atomic instead of __atomic_base, and use __atomic_diff_t for scalar
+	parameters.
+	(atomic_fetch_and_explicit, atomic_fetch_or_explicit)
+	(atomic_fetch_xor_explicit, atomic_fetch_and, atomic_fetch_or)
+	(atomic_fetch_xor): Use __atomic_val_t for scalar parameters.
+	(atomic_fetch_add_explicit, atomic_fetch_sub_explicit)
+	(atomic_fetch_add, atomic_fetch_sub): Remove overloads for atomic
+	address types.
+	* testsuite/29_atomics/atomic/60695.cc: Adjust dg-error lineno.
+	* testsuite/29_atomics/atomic/69769.cc: New test.
+	* testsuite/29_atomics/atomic/nonmembers.cc: New test.
+	* testsuite/29_atomics/atomic/operators/pointer_partial_void.cc:
+	Disable test for C++17 and later.
+	* testsuite/29_atomics/atomic/requirements/typedefs.cc: New test.
+	* testsuite/29_atomics/atomic_integral/nonmembers.cc: New test.
+	* testsuite/29_atomics/atomic_integral/requirements/typedefs.cc: New
+	test.
+
+2018-05-23  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/fs_path.h (path::__is_encoded_char): Change from class
+	template to alias template.
+	(path::__value_type_is_char): Use remove_const_t.
+	(path:_S_string_from_iter): New helper function.
+	(path::_S_convert(InputIter, __null_terminated))
+	(path::_S_convert_loc(InputIter, __null_terminated, const locale&)):
+	Use _S_string_from_iter.
+	(path::string<_CharT, _Allocator>(const _Allocator&)): Allow sharing
+	rep for COW strings.
+	* include/experimental/bits/fs_path.h (path::__is_encoded_char):
+	Change from class template to alias template.
+	(path::__value_type_is_char): Use remove_const.
+	(path:_S_string_from_iter): New helper function.
+	(path::_S_convert(InputIter, __null_terminated))
+	(path::_S_convert_loc(InputIter, __null_terminated, const locale&)):
+	Use _S_string_from_iter.
+	* testsuite/27_io/filesystem/path/append/source.cc: Test appending
+	wide strings.
+	* testsuite/27_io/filesystem/path/concat/strings.cc: Check for exact
+	string equality, not path equivalence.
+	* testsuite/27_io/filesystem/path/construct/format.cc: Check
+	construction from std::string and std::wstring and input iterators.
+	* testsuite/27_io/filesystem/path/construct/locale.cc: Check
+	construction from iterators.
+	* testsuite/experimental/filesystem/path/concat/strings.cc: Check for
+	exact string equality, not path equivalence.
+	* testsuite/experimental/filesystem/path/construct/locale.cc: Check
+	construction from iterators.
+
+	* include/bits/fs_path.h (path::_M_type): Change default member
+	initializer to _Filename.
+	(path::begin): Create past-the-end iterator for empty path.
+	* src/filesystem/std-path.cc (path::remove_filename()): Remove
+	debugging check.
+	(path::has_relative_path()): Return false for empty filenames.
+	(path::_M_split_cmpts): Set _M_type to _Filename for empty paths.
+	Fix offset of empty final component.
+	* testsuite/27_io/filesystem/path/itr/components.cc: New.
+	* testsuite/27_io/filesystem/path/itr/traversal.cc: Add new inputs.
+
+2018-05-21  Jonathan Wakely  <jwakely@redhat.com>
+
+	Add support for opening file streams from wide character strings.
+	* config/io/basic_file_stdio.cc [_GLIBCXX_HAVE__WFOPEN]
+	(__basic_file<char>::open(const wchar_t*, ios_base::openmode)):
+	Define new overload.
+	* config/io/basic_file_stdio.h [_GLIBCXX_HAVE__WFOPEN]
+	(__basic_file<char>::open(const wchar_t*, ios_base::openmode)):
+	Declare new overload.
+	* configure.ac: Check for _wfopen.
+	* crossconfig.m4: Likewise.
+	* configure: Regenerate.
+	* config.h.in: Regenerate.
+	* include/bits/fstream.tcc [_GLIBCXX_HAVE__WFOPEN]
+	(basic_filebuf<C,T>::open(const wchar_t*, ios_base::openmode)):
+	Define new overload.
+	* include/std/fstream [_GLIBCXX_HAVE__WFOPEN]
+	(basic_filebuf<C,T>::open(const wchar_t*, ios_base::openmode)):
+	Declare new overload.
+	[_GLIBCXX_HAVE__WFOPEN]
+	(basic_ifstream<C,T>::basic_ifstream(const wchar_t*, openmode))
+	(basic_ifstream<C,T>::basic_open(const wchar_t*, openmode))
+	(basic_ofstream<C,T>::basic_ifstream(const wchar_t*, openmode))
+	(basic_ofstream<C,T>::basic_open(const wchar_t*, openmode))
+	(basic_fstream<C,T>::basic_ifstream(const wchar_t*, openmode))
+	(basic_fstream<C,T>::basic_open(const wchar_t*, openmode)): Define
+	new overloads.
+	* testsuite/27_io/basic_filebuf/open/wchar_t/1.cc: New.
+	* testsuite/27_io/basic_ifstream/cons/wchar_t/1.cc: New.
+	* testsuite/27_io/basic_ifstream/open/wchar_t/1.cc: New.
+	* testsuite/27_io/basic_ofstream/cons/wchar_t/1.cc: New.
+	* testsuite/27_io/basic_ofstream/open/wchar_t/1.cc: New.
+	* testsuite/27_io/basic_fstream/cons/wchar_t/1.cc: New.
+	* testsuite/27_io/basic_fstream/open/wchar_t/1.cc: New.
+
+2018-05-21  François Dumont  <fdumont@gcc.gnu.org>
+
+	PR libstdc++/85845
+	* include/bits/stl_tree.h
+	(_Rb_tree_impl(_Rb_tree_impl&&, _Node_allocator&&)): Fix noexcept
+	qualification.
+
+2018-05-21  Jonathan Wakely  <jwakely@redhat.com>
+
+	* src/filesystem/std-ops.cc (absolute): Report an error for empty
+	paths.
+	(weakly_canonical(const path&)): Do not call canonical on empty path.
+	(weakly_canonical(const path&, error_code&)): Likewise.
+	* testsuite/27_io/filesystem/operations/absolute.cc: Check for errors.
+
+	PR libstdc++/85818
+	* testsuite/experimental/filesystem/path/preferred_separator.cc: Add
+	dg-require-filesystem-ts.
+
+	PR libstdc++/85843
+	* src/c++11/cow-stdexcept.cc (logic_error, runtime_error): Explicitly
+	initialize base class to avoid warnings.
+
+2018-05-19  Jonathan Wakely  <jwakely@redhat.com>
+
+	* src/c++11/codecvt.cc (__codecvt_utf8_base<wchar_t>::do_in)
+	[__SIZEOF_WCHAR_T__==2 && __BYTE_ORDER__!=__ORDER_BIG_ENDIAN__]: Set
+	little_endian element in bitmask.
+	* testsuite/22_locale/codecvt/codecvt_utf8/69703.cc: Run all tests.
+	* testsuite/22_locale/codecvt/codecvt_utf8/wchar_t/1.cc: New.
+
+2018-05-18  François Dumont  <fdumont@gcc.gnu.org>
+
+	* include/bits/stl_tree.h
+	(_Rb_tree_impl(_Rb_tree_impl&&, _Node_allocator&&)): New.
+	(_Rb_tree(_Rb_tree&&, _Node_allocator&&, true_type)): New, use latter.
+	(_Rb_tree(_Rb_tree&&, _Node_allocator&&, false_type)): New.
+	(_Rb_tree(_Rb_tree&&, _Node_allocator&&)): Adapt, use latters.
+	* include/debug/map.h
+	(map(map&&, const_allocator_type&)): Add noexcept qualitication.
+	* include/debug/multimap.h
+	(multimap(multimap&&, const_allocator_type&)): Likewise.
+	* include/debug/set.h
+	(set(set&&, const_allocator_type&)): Likewise.
+	* include/debug/multiset.h
+	(multiset(multiset&&, const_allocator_type&)): Likewise.
+	* testsuite/23_containers/map/cons/noexcept_default_construct.cc:
+	Add checks.
+	* testsuite/23_containers/map/cons/noexcept_move_construct.cc:
+	Add checks.
+	* testsuite/23_containers/multimap/cons/noexcept_default_construct.cc:
+	Add checks.
+	* testsuite/23_containers/multimap/cons/noexcept_move_construct.cc:
+	Add checks.
+	* testsuite/23_containers/multiset/cons/noexcept_default_construct.cc:
+	Add checks.
+	* testsuite/23_containers/multiset/cons/noexcept_move_construct.cc:
+	Add checks.
+	* testsuite/23_containers/set/cons/noexcept_default_construct.cc:
+	Add checks.
+	* testsuite/23_containers/set/cons/noexcept_move_construct.cc:
+	Add checks.
+
+2018-05-18  Jason Merrill  <jason@redhat.com>
+
+	* include/bits/stl_deque.h (_Deque_iterator): Constrain constructor
+	for conversion to const_iterator.  Add defaulted copy ops.
+	* libsupc++/new (bad_alloc): Add defaulted copy ops.
+	* libsupc++/exception.h (exception): Add defaulted copy ops.
+	* include/std/system_error (system_error): Add defaulted copy ops.
+	* include/std/stdexcept (domain_error, invalid_argument)
+	(length_error, out_of_range, range_error, overflow_error)
+	(underflow_error): Add defaulted copy ops.
+	* include/bits/stl_iterator.h (reverse_iterator): Add defaulted
+	copy assignment.
+	* include/bits/allocator.h (allocator): Add defaulted copy assignment.
+	* include/ext/throw_allocator.h (condition_base): Add defaulted
+	default and copy ctor and copy assignment.
+
+2018-05-18  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/85098
+	* include/bits/regex.h [__cplusplus < 201703L] (basic_regex::icase)
+	(basic_regex::nosubs, basic_regex::optimize, basic_regex::collate)
+	(basic_regex::ECMAScript, basic_regex::basic, basic_regex::extended)
+	(basic_regex::awk, basic_regex::grep, basic_regex::egrep): Add
+	definitions.
+	* include/bits/regex_automaton.h (_NFA::_M_insert_state): Adjust
+	whitespace.
+	* include/bits/regex_compiler.tcc (__INSERT_REGEX_MATCHER): Add
+	braces around body of do-while.
+	* testsuite/28_regex/basic_regex/85098.cc: New
+
+2018-05-17  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/85818
+	* src/filesystem/path.cc (path::preferred_separator): Add used
+	attribute.
+	* testsuite/experimental/filesystem/path/preferred_separator.cc: New.
+
+	PR libstdc++/85812
+	* libsupc++/cxxabi_init_exception.h (__cxa_free_exception): Declare.
+	* libsupc++/exception_ptr.h (make_exception_ptr) [__cpp_exceptions]:
+	Refactor to separate non-throwing and throwing implementations.
+	[__cpp_rtti && !_GLIBCXX_HAVE_CDTOR_CALLABI]: Deallocate the memory
+	if constructing the object throws.
+
+2018-05-15  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/85749
+	* include/bits/random.h (__detail::__is_seed_seq): New SFINAE helper.
+	(linear_congruential_engine, mersenne_twister_engine)
+	(subtract_with_carry_engine, discard_block_engine)
+	(independent_bits_engine, shuffle_order_engine): Use __is_seed_seq to
+	constrain function templates taking seed sequences.
+	* include/bits/random.tcc (linear_congruential_engine::seed(_Sseq&))
+	(mersenne_twister_engine::seed(_Sseq&))
+	(subtract_with_carry_engine::seed(_Sseq&)): Change return types to
+	match declarations.
+	* include/ext/random (simd_fast_mersenne_twister_engine): Use
+	__is_seed_seq to constrain function templates taking seed sequences.
+	* include/ext/random.tcc (simd_fast_mersenne_twister_engine::seed):
+	Change return type to match declaration.
+	* testsuite/26_numerics/random/discard_block_engine/cons/seed_seq2.cc:
+	New.
+	* testsuite/26_numerics/random/independent_bits_engine/cons/
+	seed_seq2.cc: New.
+	* testsuite/26_numerics/random/linear_congruential_engine/cons/
+	seed_seq2.cc: New.
+	* testsuite/26_numerics/random/mersenne_twister_engine/cons/
+	seed_seq2.cc: New.
+	* testsuite/26_numerics/random/pr60037-neg.cc: Adjust dg-error lineno.
+	* testsuite/26_numerics/random/shuffle_order_engine/cons/seed_seq2.cc:
+	New.
+	* testsuite/26_numerics/random/subtract_with_carry_engine/cons/
+	seed_seq2.cc: New.
+	* testsuite/ext/random/simd_fast_mersenne_twister_engine/cons/
+	seed_seq2.cc: New.
+
+	PR libstdc++/83891
+	* include/bits/fs_path.h (path::is_absolute()): Use same definition
+	for all operating systems.
+	* include/experimental/bits/fs_path.h (path::is_absolute()): Likewise.
+	* testsuite/27_io/filesystem/path/query/is_absolute.cc: New.
+	* testsuite/27_io/filesystem/path/query/is_relative.cc: Fix comment.
+	* testsuite/experimental/filesystem/path/query/is_absolute.cc: New.
+
+	* testsuite/27_io/filesystem/path/decompose/extension.cc: Remove
+	unused <vector> header.
+	* testsuite/27_io/filesystem/path/query/empty.cc: Likewise.
+	* testsuite/27_io/filesystem/path/query/has_extension.cc: Likewise.
+	* testsuite/27_io/filesystem/path/query/has_filename.cc: Likewise.
+	* testsuite/27_io/filesystem/path/query/has_parent_path.cc: Likewise.
+	* testsuite/27_io/filesystem/path/query/has_relative_path.cc:
+	Likewise.
+	* testsuite/27_io/filesystem/path/query/has_root_directory.cc:
+	Likewise.
+	* testsuite/27_io/filesystem/path/query/has_root_name.cc: Likewise.
+	* testsuite/27_io/filesystem/path/query/has_root_path.cc: Likewise.
+	* testsuite/27_io/filesystem/path/query/has_stem.cc: Likewise.
+	* testsuite/27_io/filesystem/path/query/is_relative.cc: Likewise.
+	* testsuite/experimental/filesystem/path/decompose/extension.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/empty.cc: Likewise.
+	* testsuite/experimental/filesystem/path/query/has_extension.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/has_filename.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/has_parent_path.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/has_relative_path.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/has_root_directory.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/has_root_name.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/has_root_path.cc:
+	Likewise.
+	* testsuite/experimental/filesystem/path/query/has_stem.cc: Likewise.
+	* testsuite/experimental/filesystem/path/query/is_relative.cc:
+	Likewise.
+
+	PR libstdc++/84159
+	* include/bits/fs_path.h (path::operator/=, path::append): Construct
+	temporary path before calling _M_append.
+	(path::_M_append): Change parameter to path and implement C++17
+	semantics.
+	* testsuite/27_io/filesystem/path/append/path.cc: Add helper function
+	and more examples from the standard.
+	* testsuite/27_io/filesystem/path/append/source.cc: New.
+	* testsuite/27_io/filesystem/path/decompose/filename.cc: Add comment.
+	* testsuite/27_io/filesystem/path/nonmember/append.cc: New.
+
+	* include/std/variant (__gen_vtable_impl::__visit_invoke): Qualify
+	__invoke to prevent ADL.
+
+2018-05-14  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/81256
+	* include/bits/fstream.tcc (basic_filebuf::close): Do not swallow
+	exceptions from _M_terminate_output().
+	* include/std/fstream (basic_filebuf::~basic_filebuf): Swallow any
+	exceptions from close().
+	* testsuite/27_io/basic_filebuf/close/81256.cc: New.
+
+	* include/bits/valarray_array.h (__valarray_get_memory): Remove.
+	(__valarray_get_storage): Call operator new directly. Remove ignored
+	top-level restrict qualifier and add malloc attribute instead.
+	(_Array<_Tp>::_Array(size_t)): Remove unused constructor.
+
+	PR libstdc++/67554
+	* include/bits/valarray_array.h (_Array_copy_ctor<_Tp, true>)
+	(_Array_copier<_Tp, true>): Do not pass null pointers to memcpy.
+
+	PR libstdc++/82966
+	* include/bits/node_handle.h (_Node_handle_common::_M_swap): Use value
+	instead of type.
+	* testsuite/23_containers/set/modifiers/node_swap.cc: New.
+
+2018-05-13  Ville Voutilainen  <ville.voutilainen@gmail.com>
+
+	PR libstdc++/80165
+	* testsuite/20_util/variant/80165.cc: New.
+
 2018-05-10  Jonathan Wakely  <jwakely@redhat.com>
 
 	* doc/xml/faq.xml: Link to C++17 status. Add note to outdated answer.

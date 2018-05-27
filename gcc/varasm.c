@@ -5652,7 +5652,8 @@ weak_finish (void)
       tree alias_decl = TREE_PURPOSE (t);
       tree target = ultimate_transparent_alias_target (&TREE_VALUE (t));
 
-      if (! TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (alias_decl)))
+      if (! TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (alias_decl))
+         || TREE_SYMBOL_REFERENCED (target))
 	/* Remove alias_decl from the weak list, but leave entries for
 	   the target alone.  */
 	target = NULL_TREE;
@@ -5832,7 +5833,8 @@ do_assemble_alias (tree decl, tree target)
       globalize_decl (decl);
       maybe_assemble_visibility (decl);
     }
-  if (lookup_attribute ("ifunc", DECL_ATTRIBUTES (decl)))
+  if (TREE_CODE (decl) == FUNCTION_DECL
+      && cgraph_node::get (decl)->ifunc_resolver)
     {
 #if defined (ASM_OUTPUT_TYPE_DIRECTIVE)
       if (targetm.has_ifunc_p ())
@@ -5915,7 +5917,9 @@ assemble_alias (tree decl, tree target)
 # else
       if (!DECL_WEAK (decl))
 	{
-	  if (lookup_attribute ("ifunc", DECL_ATTRIBUTES (decl)))
+	  /* NB: ifunc_resolver isn't set when an error is detected.  */
+	  if (TREE_CODE (decl) == FUNCTION_DECL
+	      && lookup_attribute ("ifunc", DECL_ATTRIBUTES (decl)))
 	    error_at (DECL_SOURCE_LOCATION (decl),
 		      "ifunc is not supported in this configuration");
 	  else
@@ -6446,7 +6450,7 @@ default_elf_asm_named_section (const char *name, unsigned int flags,
     {
       if (!(flags & SECTION_DEBUG))
 	*f++ = 'a';
-#if defined (HAVE_GAS_SECTION_EXCLUDE) && HAVE_GAS_SECTION_EXCLUDE == 1
+#if HAVE_GAS_SECTION_EXCLUDE
       if (flags & SECTION_EXCLUDE)
 	*f++ = 'e';
 #endif
@@ -7047,7 +7051,8 @@ default_binds_local_p_3 (const_tree exp, bool shlib, bool weak_dominate,
      weakref alias.  */
   if (lookup_attribute ("weakref", DECL_ATTRIBUTES (exp))
       || (TREE_CODE (exp) == FUNCTION_DECL
-	  && lookup_attribute ("ifunc", DECL_ATTRIBUTES (exp))))
+	  && cgraph_node::get (exp)
+	  && cgraph_node::get (exp)->ifunc_resolver))
     return false;
 
   /* Static variables are always local.  */

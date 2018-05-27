@@ -90,7 +90,7 @@ build_lambda_object (tree lambda_expr)
 	val = build_array_copy (val);
       else if (DECL_NORMAL_CAPTURE_P (field)
 	       && !DECL_VLA_CAPTURE_P (field)
-	       && TREE_CODE (TREE_TYPE (field)) != REFERENCE_TYPE)
+	       && !TYPE_REF_P (TREE_TYPE (field)))
 	{
 	  /* "the entities that are captured by copy are used to
 	     direct-initialize each corresponding non-static data
@@ -411,7 +411,7 @@ build_capture_proxy (tree member, tree init)
 
   type = lambda_proxy_type (object);
 
-  if (name == this_identifier && !POINTER_TYPE_P (type))
+  if (name == this_identifier && !INDIRECT_TYPE_P (type))
     {
       type = build_pointer_type (type);
       type = cp_build_qualified_type (type, TYPE_QUAL_CONST);
@@ -571,7 +571,7 @@ add_capture (tree lambda, tree id, tree orig_init, bool by_reference_p,
 
       if (id == this_identifier && !by_reference_p)
 	{
-	  gcc_assert (POINTER_TYPE_P (type));
+	  gcc_assert (INDIRECT_TYPE_P (type));
 	  type = TREE_TYPE (type);
 	  initializer = cp_build_fold_indirect_ref (initializer);
 	}

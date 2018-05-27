@@ -674,7 +674,7 @@ poplevel (int keep, int reverse, int functionbody)
 	      }
 	    else if (DECL_CONTEXT (decl) == current_function_decl
 		     // For -Wunused-but-set-variable leave references alone.
-		     && TREE_CODE (TREE_TYPE (decl)) != REFERENCE_TYPE
+		     && !TYPE_REF_P (TREE_TYPE (decl))
 		     && errorcount == unused_but_set_errorcount)
 	      {
 		if (!DECL_NAME (decl) && DECL_DECOMPOSITION_P (decl))
@@ -5562,7 +5562,7 @@ check_for_uninitialized_const_var (tree decl, bool constexpr_context_p,
      external linkage and must be initialized. ($8.4; $12.1)'' ARM
      7.1.6 */
   if (VAR_P (decl)
-      && TREE_CODE (type) != REFERENCE_TYPE
+      && !TYPE_REF_P (type)
       && (constexpr_context_p
 	  || CP_TYPE_CONST_P (type) || var_in_constexpr_fn (decl))
       && !DECL_NONTRIVIALLY_INITIALIZED_P (decl))
@@ -6265,7 +6265,7 @@ check_initializer (tree decl, tree init, int flags, vec<tree, va_gc> **cleanups)
 
   if (TREE_CODE (decl) == CONST_DECL)
     {
-      gcc_assert (TREE_CODE (type) != REFERENCE_TYPE);
+      gcc_assert (!TYPE_REF_P (type));
 
       DECL_INITIAL (decl) = init;
 
@@ -6275,9 +6275,9 @@ check_initializer (tree decl, tree init, int flags, vec<tree, va_gc> **cleanups)
   else if (!init && DECL_REALLY_EXTERN (decl))
     ;
   else if (init || type_build_ctor_call (type)
-	   || TREE_CODE (type) == REFERENCE_TYPE)
+	   || TYPE_REF_P (type))
     {
-      if (TREE_CODE (type) == REFERENCE_TYPE)
+      if (TYPE_REF_P (type))
 	{
 	  init = grok_reference_init (decl, type, init, flags);
 	  flags |= LOOKUP_ALREADY_DIGESTED;
@@ -6616,7 +6616,7 @@ initialize_local_var (tree decl, tree init)
 	  gcc_assert (TREE_OPERAND (init, 0) == decl);
 	  DECL_INITIAL (decl) = rinit;
 
-	  if (warn_init_self && TREE_CODE (type) == REFERENCE_TYPE)
+	  if (warn_init_self && TYPE_REF_P (type))
 	    {
 	      STRIP_NOPS (rinit);
 	      if (rinit == decl)
@@ -6889,7 +6889,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
       /* If DECL is a reference, then we want to know whether init is a
 	 reference constant; init_const_expr_p as passed tells us whether
 	 it's an rvalue constant.  */
-      if (TREE_CODE (type) == REFERENCE_TYPE)
+      if (TYPE_REF_P (type))
 	init_const_expr_p = potential_constant_expression (init);
       if (init_const_expr_p)
 	{
@@ -6898,7 +6898,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	  DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (decl) = 1;
 	  if (decl_maybe_constant_var_p (decl)
 	      /* FIXME setting TREE_CONSTANT on refs breaks the back end.  */
-	      && TREE_CODE (type) != REFERENCE_TYPE)
+	      && !TYPE_REF_P (type))
 	    TREE_CONSTANT (decl) = 1;
 	}
     }
@@ -6935,7 +6935,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	}
       else if (init
 	       && init_const_expr_p
-	       && TREE_CODE (type) != REFERENCE_TYPE
+	       && !TYPE_REF_P (type)
 	       && decl_maybe_constant_var_p (decl)
 	       && !(dep_init = value_dependent_init_p (init)))
 	{
@@ -7004,7 +7004,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
   /* A reference will be modified here, as it is initialized.  */
   if (! DECL_EXTERNAL (decl)
       && TREE_READONLY (decl)
-      && TREE_CODE (type) == REFERENCE_TYPE)
+      && TYPE_REF_P (type))
     {
       was_readonly = 1;
       TREE_READONLY (decl) = 0;
@@ -7345,7 +7345,7 @@ get_tuple_decomp_init (tree decl, unsigned i)
 
   /* [The id-expression] e is an lvalue if the type of the entity e is an
      lvalue reference and an xvalue otherwise.  */
-  if (TREE_CODE (etype) != REFERENCE_TYPE
+  if (!TYPE_REF_P (etype)
       || TYPE_REF_IS_RVALUE (etype))
     e = move (e);
 
@@ -7488,7 +7488,7 @@ cp_finish_decomp (tree decl, tree first, unsigned int count)
   tree type = TREE_TYPE (decl);
   tree dexp = decl;
 
-  if (TREE_CODE (type) == REFERENCE_TYPE)
+  if (TYPE_REF_P (type))
     {
       dexp = convert_from_reference (dexp);
       type = complete_type (TREE_TYPE (type));
@@ -8592,6 +8592,7 @@ grokfndecl (tree ctype,
 	    bool deletedp,
 	    special_function_kind sfk,
 	    bool funcdef_flag,
+	    bool late_return_type_p,
 	    int template_count,
 	    tree in_namespace,
 	    tree* attrlist,
@@ -8611,10 +8612,7 @@ grokfndecl (tree ctype,
       return NULL_TREE;
     }
 
-  if (rqual)
-    type = build_ref_qualified_type (type, rqual);
-  if (raises)
-    type = build_exception_variant (type, raises);
+  type = build_cp_fntype_variant (type, rqual, raises, late_return_type_p);
 
   decl = build_lang_decl (FUNCTION_DECL, declarator, type);
 
@@ -10390,18 +10388,12 @@ grokdeclarator (const cp_declarator *declarator,
       type = NULL_TREE;
       type_was_error_mark_node = true;
     }
-  /* If the entire declaration is itself tagged as deprecated then
-     suppress reports of deprecated items.  */
-  if (type && TREE_DEPRECATED (type)
-      && deprecated_state != DEPRECATED_SUPPRESS)
-    cp_warn_deprecated_use (type);
+  cp_warn_deprecated_use (type);
   if (type && TREE_CODE (type) == TYPE_DECL)
     {
       typedef_decl = type;
       type = TREE_TYPE (typedef_decl);
-      if (TREE_DEPRECATED (type)
-	  && DECL_ARTIFICIAL (typedef_decl)
-	  && deprecated_state != DEPRECATED_SUPPRESS)
+      if (DECL_ARTIFICIAL (typedef_decl))
 	cp_warn_deprecated_use (type);
     }
   /* No type at all: default to `int', and set DEFAULTED_INT
@@ -11298,7 +11290,7 @@ grokdeclarator (const cp_declarator *declarator,
 	  /* Filter out pointers-to-references and references-to-references.
 	     We can get these if a TYPE_DECL is used.  */
 
-	  if (TREE_CODE (type) == REFERENCE_TYPE)
+	  if (TYPE_REF_P (type))
 	    {
 	      if (declarator->kind != cdk_reference)
 		{
@@ -11404,7 +11396,7 @@ grokdeclarator (const cp_declarator *declarator,
               */
 	      if (VOID_TYPE_P (type))
 		/* We already gave an error.  */;
-	      else if (TREE_CODE (type) == REFERENCE_TYPE)
+	      else if (TYPE_REF_P (type))
 		{
 		  if (declarator->u.reference.rvalue_ref)
 		    /* Leave type alone.  */;
@@ -11485,7 +11477,7 @@ grokdeclarator (const cp_declarator *declarator,
       /* DR1688 says that a `constexpr' specifier in combination with
 	 `volatile' is valid.  */
 
-      if (TREE_CODE (type) != REFERENCE_TYPE)
+      if (!TYPE_REF_P (type))
 	{
 	  type_quals |= TYPE_QUAL_CONST;
 	  type = cp_build_qualified_type (type, type_quals);
@@ -11668,7 +11660,7 @@ grokdeclarator (const cp_declarator *declarator,
 	  error ("const %qs cannot be declared %<mutable%>", name);
 	  storage_class = sc_none;
 	}
-      else if (TREE_CODE (type) == REFERENCE_TYPE)
+      else if (TYPE_REF_P (type))
 	{
 	  permerror (input_location, "reference %qs cannot be declared "
 	             "%<mutable%>", name);
@@ -11723,9 +11715,7 @@ grokdeclarator (const cp_declarator *declarator,
 	{
 	  if (!current_function_decl)
 	    DECL_CONTEXT (decl) = FROB_CONTEXT (current_namespace);
-	  else if (DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P (current_function_decl)
-		   || (DECL_MAYBE_IN_CHARGE_DESTRUCTOR_P
-		       (current_function_decl)))
+	  else if (DECL_MAYBE_IN_CHARGE_CDTOR_P (current_function_decl))
 	    /* The TYPE_DECL is "abstract" because there will be
 	       clones of this constructor/destructor, and there will
 	       be copies of this TYPE_DECL generated in those
@@ -12136,9 +12126,6 @@ grokdeclarator (const cp_declarator *declarator,
 	    publicp = (! friendp || ! staticp)
 	      && function_context == NULL_TREE;
 
-	    if (late_return_type_p)
-	      TYPE_HAS_LATE_RETURN_TYPE (type) = 1;
-
 	    decl = grokfndecl (ctype, type,
 			       TREE_CODE (unqualified_id) != TEMPLATE_ID_EXPR
 			       ? unqualified_id : dname,
@@ -12149,7 +12136,8 @@ grokdeclarator (const cp_declarator *declarator,
 			       friendp ? -1 : 0, friendp, publicp,
                                inlinep | (2 * constexpr_p) | (4 * concept_p),
 			       initialized == SD_DELETED, sfk,
-			       funcdef_flag, template_count, in_namespace,
+			       funcdef_flag, late_return_type_p,
+			       template_count, in_namespace,
 			       attrlist, declarator->id_loc);
             decl = set_virt_specifiers (decl, virt_specifiers);
 	    if (decl == NULL_TREE)
@@ -12386,9 +12374,6 @@ grokdeclarator (const cp_declarator *declarator,
 	publicp = (ctype != NULL_TREE
 		   || storage_class != sc_static);
 
-	if (late_return_type_p)
-	  TYPE_HAS_LATE_RETURN_TYPE (type) = 1;
-
 	decl = grokfndecl (ctype, type, original_name, parms, unqualified_id,
                            reqs, virtualp, flags, memfn_quals, rqual, raises,
 			   1, friendp,
@@ -12397,6 +12382,7 @@ grokdeclarator (const cp_declarator *declarator,
 			   initialized == SD_DELETED,
                            sfk,
                            funcdef_flag,
+			   late_return_type_p,
 			   template_count, in_namespace, attrlist,
 			   declarator->id_loc);
 	if (decl == NULL_TREE)
@@ -12797,7 +12783,7 @@ grokparms (tree parmlist, tree *parms)
 	    }
 	  else if (abstract_virtuals_error (decl, type))
 	    any_error = 1;  /* Seems like a good idea.  */
-	  else if (cxx_dialect < cxx17 && POINTER_TYPE_P (type))
+	  else if (cxx_dialect < cxx17 && INDIRECT_TYPE_P (type))
 	    {
 	      /* Before C++17 DR 393:
 		 [dcl.fct]/6, parameter types cannot contain pointers
@@ -12894,7 +12880,7 @@ copy_fn_p (const_tree d)
       /* Pass by value copy assignment operator.  */
       result = -1;
     }
-  else if (TREE_CODE (arg_type) == REFERENCE_TYPE
+  else if (TYPE_REF_P (arg_type)
 	   && !TYPE_REF_IS_RVALUE (arg_type)
 	   && TYPE_MAIN_VARIANT (TREE_TYPE (arg_type)) == DECL_CONTEXT (d))
     {
@@ -12962,7 +12948,7 @@ move_signature_fn_p (const_tree d)
   if (arg_type == error_mark_node)
     return 0;
 
-  if (TREE_CODE (arg_type) == REFERENCE_TYPE
+  if (TYPE_REF_P (arg_type)
       && TYPE_REF_IS_RVALUE (arg_type)
       && same_type_p (TYPE_MAIN_VARIANT (TREE_TYPE (arg_type)),
                       DECL_CONTEXT (d)))
@@ -13334,7 +13320,7 @@ grok_op_properties (tree decl, bool complain)
       && warn_conversion)
     {
       tree t = TREE_TYPE (name);
-      int ref = (TREE_CODE (t) == REFERENCE_TYPE);
+      int ref = TYPE_REF_P (t);
 
       if (ref)
 	t = TYPE_MAIN_VARIANT (TREE_TYPE (t));
@@ -13388,14 +13374,14 @@ grok_op_properties (tree decl, bool complain)
     {
       tree arg = TREE_VALUE (argtypes);
       tree ret = TREE_TYPE (TREE_TYPE (decl));
-      if (methodp || TREE_CODE (arg) == REFERENCE_TYPE)
+      if (methodp || TYPE_REF_P (arg))
 	arg = TREE_TYPE (arg);
       arg = TYPE_MAIN_VARIANT (arg);
 
       if (operator_code == PREINCREMENT_EXPR
 	  || operator_code == PREDECREMENT_EXPR)
 	{
-	  if (TREE_CODE (ret) != REFERENCE_TYPE
+	  if (!TYPE_REF_P (ret)
 	      || !same_type_p (TYPE_MAIN_VARIANT (TREE_TYPE (ret)), arg))
 	    warning (OPT_Weffc__, "prefix %qD should return %qT", decl,
 		     build_reference_type (arg));
@@ -13414,7 +13400,7 @@ grok_op_properties (tree decl, bool complain)
 	  || operator_code == TRUNC_DIV_EXPR
 	  || operator_code == MULT_EXPR
 	  || operator_code == TRUNC_MOD_EXPR)
-      && TREE_CODE (TREE_TYPE (TREE_TYPE (decl))) == REFERENCE_TYPE)
+      && TYPE_REF_P (TREE_TYPE (TREE_TYPE (decl))))
     warning (OPT_Weffc__, "%qD should return by value", decl);
 
   return true;
@@ -14753,11 +14739,9 @@ check_function_type (tree decl, tree current_function_parms)
 					     TREE_CHAIN (args));
       else
 	fntype = build_function_type (void_type_node, args);
-      fntype
-	= build_exception_variant (fntype,
-				   TYPE_RAISES_EXCEPTIONS (TREE_TYPE (decl)));
       fntype = (cp_build_type_attribute_variant
 		(fntype, TYPE_ATTRIBUTES (TREE_TYPE (decl))));
+      fntype = cxx_copy_lang_qualifiers (fntype, TREE_TYPE (decl));
       TREE_TYPE (decl) = fntype;
     }
   else
@@ -15822,7 +15806,7 @@ finish_function (bool inline_p)
 	    && !TREE_NO_WARNING (decl)
 	    && !DECL_IN_SYSTEM_HEADER (decl)
 	    && TREE_TYPE (decl) != error_mark_node
-	    && TREE_CODE (TREE_TYPE (decl)) != REFERENCE_TYPE
+	    && !TYPE_REF_P (TREE_TYPE (decl))
 	    && (!CLASS_TYPE_P (TREE_TYPE (decl))
 	        || !TYPE_HAS_NONTRIVIAL_DESTRUCTOR (TREE_TYPE (decl))))
 	  warning_at (DECL_SOURCE_LOCATION (decl),
@@ -16154,22 +16138,18 @@ static_fn_type (tree memfntype)
 
   if (TYPE_PTRMEMFUNC_P (memfntype))
     memfntype = TYPE_PTRMEMFUNC_FN_TYPE (memfntype);
-  if (POINTER_TYPE_P (memfntype)
+  if (INDIRECT_TYPE_P (memfntype)
       || TREE_CODE (memfntype) == FUNCTION_DECL)
     memfntype = TREE_TYPE (memfntype);
   if (TREE_CODE (memfntype) == FUNCTION_TYPE)
     return memfntype;
   gcc_assert (TREE_CODE (memfntype) == METHOD_TYPE);
   args = TYPE_ARG_TYPES (memfntype);
-  cp_ref_qualifier rqual = type_memfn_rqual (memfntype);
   fntype = build_function_type (TREE_TYPE (memfntype), TREE_CHAIN (args));
-  fntype = apply_memfn_quals (fntype, type_memfn_quals (memfntype), rqual);
+  fntype = apply_memfn_quals (fntype, type_memfn_quals (memfntype));
   fntype = (cp_build_type_attribute_variant
 	    (fntype, TYPE_ATTRIBUTES (memfntype)));
-  fntype = (build_exception_variant
-	    (fntype, TYPE_RAISES_EXCEPTIONS (memfntype)));
-  if (TYPE_HAS_LATE_RETURN_TYPE (memfntype))
-    TYPE_HAS_LATE_RETURN_TYPE (fntype) = 1;
+  fntype = cxx_copy_lang_qualifiers (fntype, memfntype);
   return fntype;
 }
 
