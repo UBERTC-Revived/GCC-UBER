@@ -1452,6 +1452,12 @@ package Sem_Util is
    --  Inherit the rep item chain of type From_Typ without clobbering any
    --  existing rep items on Typ's chain. Typ is the destination type.
 
+   function Inherits_From_Tagged_Full_View (Typ : Entity_Id) return Boolean;
+   pragma Inline (Inherits_From_Tagged_Full_View);
+   --  Return True if Typ is an untagged private type completed with a
+   --  derivation of an untagged private type declaration whose full view
+   --  is a tagged type.
+
    procedure Insert_Explicit_Dereference (N : Node_Id);
    --  In a context that requires a composite or subprogram type and where a
    --  prefix is an access type, rewrite the access type node N (which is the
@@ -1506,12 +1512,16 @@ package Sem_Util is
    --  Determine whether package E1 is an ancestor of E2
 
    function Is_Atomic_Object (N : Node_Id) return Boolean;
-   --  Determines if the given node denotes an atomic object in the sense of
-   --  the legality checks described in RM C.6(12).
+   --  Determine whether arbitrary node N denotes a reference to an atomic
+   --  object as per Ada RM C.6(12).
+
+   function Is_Atomic_Object_Entity (Id : Entity_Id) return Boolean;
+   --  Determine whether arbitrary entity Id denotes an atomic object as per
+   --  Ada RM C.6(12).
 
    function Is_Atomic_Or_VFA_Object (N : Node_Id) return Boolean;
-   --  Determines if the given node is an atomic object (Is_Atomic_Object true)
-   --  or else is an object for which VFA is present.
+   --  Determine whether arbitrary node N denotes a reference to an object
+   --  which is either atomic or Volatile_Full_Access.
 
    function Is_Attribute_Result (N : Node_Id) return Boolean;
    --  Determine whether node N denotes attribute 'Result

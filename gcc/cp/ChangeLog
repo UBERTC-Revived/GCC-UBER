@@ -1,3 +1,39 @@
+2018-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* typeck.c (cxx_sizeof_or_alignof_type): Return size_one_node instead
+	of using it in dead store.
+
+2018-05-29  Jason Merrill  <jason@redhat.com>
+
+	PR c++/67445 - returning temporary initializer_list.
+	PR c++/67711 - assigning from temporary initializer_list.
+	PR c++/48562 - new initializer_list.
+	* typeck.c (maybe_warn_about_returning_address_of_local): Also warn
+	about returning local initializer_list.
+	* cp-tree.h (AUTO_TEMP_NAME, TEMP_NAME_P): Remove.
+	* call.c (build_over_call): Warn about assignment from temporary
+	init_list.
+	* init.c (build_new_1): Warn about 'new std::initializer_list'.
+	(find_list_begin, maybe_warn_list_ctor): New.
+	(perform_member_init): Use maybe_warn_list_ctor.
+
+2018-05-29  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/85883
+	* init.c (build_new): Handle deducing a class with new
+	with more than one argument.
+
+2018-05-29  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/85952
+	* init.c (build_aggr_init): For structured binding initialized from
+	array call mark_rvalue_use on the initializer.
+
+2018-05-28  Bernd Edlinger  <bernd.edlinger@hotmail.de>
+
+	* decl2.c (start_static_storage_duration_function): Use
+	splay_tree_delete_pointers.
+
 2018-05-25  Jason Merrill  <jason@redhat.com>
 
 	PR c++/85815 - reference to member of enclosing template.

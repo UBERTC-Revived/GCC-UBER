@@ -1,3 +1,101 @@
+2017-05-30  Jackson Woodruff  <jackson.woodruff@arm.com>
+
+	* gcc.target/aarch64/simd/ldp_stp_9: New.
+	* gcc.target/aarch64/simd/ldp_stp_10: New.
+	* gcc.target/aarch64/simd/ldp_stp_11: New.
+	* gcc.target/aarch64/simd/ldp_stp_12: New.
+
+2018-05-30  Ed Schonberg  <schonberg@adacore.com>
+
+	* gnat.dg/tls1.adb, gnat.dg/tls1_pkg.ads: New testcase.
+
+2018-05-30  Hristian Kirtchev  <kirtchev@adacore.com>
+
+	* gnat.dg/synchronized1.adb, gnat.dg/synchronized1.ads: New testcase.
+
+2018-05-29  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/85950
+	* gcc.target/i386/pr85950.c: New test.
+
+2018-05-29  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/85883
+	* g++.dg/cpp1z/class-deduction55.C: New test.
+	* g++.dg/cpp1z/class-deduction56.C: New test.
+	* g++.dg/cpp1z/class-deduction57.C: New test.
+
+2018-05-29  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/85952
+	* g++.dg/warn/Wunused-var-33.C: New test.
+
+	PR target/85918
+	* gcc.target/i386/avx512dq-pr85918.c: Add -mprefer-vector-width=512
+	and -fno-vect-cost-model options.  Add aligned(64) attribute to the
+	arrays.  Add suffix 1 to all functions and use 4 iterations rather
+	than N.  Add functions with conversions to and from float.
+	Add new set of functions with 8 iterations and another one
+	with 16 iterations, expect 24 vectorized loops instead of just 4.
+	* gcc.target/i386/avx512dq-pr85918-2.c: New test.
+
+2018-05-29  Javier Miranda  <miranda@adacore.com>
+
+	* gnat.dg/equal2.adb: New testcase.
+
+2018-05-29  Ed Schonberg  <schonberg@adacore.com>
+
+	* gnat.dg/float_attributes_overflows.adb: New testcase.
+
+2018-05-29  Pascal Obry  <obry@adacore.com>
+
+	* gnat.dg/normalize_pathname.adb: New testcase.
+
+2018-05-29  Tom de Vries  <tom@codesourcery.com>
+
+	* lib/scanasm.exp (scan-assembler-times): Use proc name in error
+	message.
+	* lib/scanipa.exp (scan-ipa-dump-times): Same.
+	* lib/scanrtl.exp (scan-rtl-dump-times): Same.
+	* lib/scantree.exp (scan-tree-dump-times): Same.
+
+2018-05-29  Tom de Vries  <tom@codesourcery.com>
+
+	* lib/scanasm.exp (scan-stack-usage, scan-stack-usage-not)
+	(scan-ada-spec, scan-ada-spec-not, scan-lto-assembler):
+	Use proc name as first argument to dg-scan.
+
+2018-05-29  Tom de Vries  <tom@codesourcery.com>
+
+	* lib/scanasm.exp (scan-hidden, scan-not-hidden): Handle being called
+	with no arguments.
+
+2018-05-28  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/85934
+	* gcc.target/i386/pr85934.c: New testcase.
+
+2018-05-28  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gnat.dg/renaming12.adb, gnat.dg/renaming12.ads: New testcase.
+
+2018-05-28  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gnat.dg/rep_clause6.adb, gnat.dg/rep_clause6.ads: New testcase.
+
+2018-05-28  Ed Schonberg  <schonberg@adacore.com>
+
+	* gnat.dg/fixedpnt5.adb: New testcase.
+
+2018-05-28  Justin Squirek  <squirek@adacore.com>
+
+	* gnat.dg/array31.adb: New testcase.
+
+2018-05-28  Justin Squirek  <squirek@adacore.com>
+
+	* gnat.dg/warn15-core-main.adb, gnat.dg/warn15-core.ads,
+	gnat.dg/warn15-interfaces.ads, gnat.dg/warn15.ads: New testcase.
+
 2018-05-27  Steven G. Kargl  <kargl@gcc.gnu.org>
 
 	* gfortran.dg/data_stmt_pointer.f90: new test.

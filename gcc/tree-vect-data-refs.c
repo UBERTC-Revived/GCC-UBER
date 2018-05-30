@@ -212,6 +212,10 @@ vect_preserves_scalar_order_p (gimple *stmt_a, gimple *stmt_b)
      (but could happen later) while reads will happen no later than their
      current position (but could happen earlier).  Reordering is therefore
      only possible if the first access is a write.  */
+  if (is_pattern_stmt_p (stmtinfo_a))
+    stmt_a = STMT_VINFO_RELATED_STMT (stmtinfo_a);
+  if (is_pattern_stmt_p (stmtinfo_b))
+    stmt_b = STMT_VINFO_RELATED_STMT (stmtinfo_b);
   gimple *earlier_stmt = get_earlier_stmt (stmt_a, stmt_b);
   return !DR_IS_WRITE (STMT_VINFO_DATA_REF (vinfo_for_stmt (earlier_stmt)));
 }
@@ -829,7 +833,10 @@ vect_record_base_alignments (vec_info *vinfo)
   data_reference *dr;
   unsigned int i;
   FOR_EACH_VEC_ELT (vinfo->datarefs, i, dr)
-    if (!DR_IS_CONDITIONAL_IN_STMT (dr))
+    {
+      gimple *stmt = DR_STMT (dr);
+    if (!DR_IS_CONDITIONAL_IN_STMT (dr)
+	&& STMT_VINFO_VECTORIZABLE (vinfo_for_stmt (stmt)))
       {
 	gimple *stmt = DR_STMT (dr);
 	vect_record_base_alignment (vinfo, stmt, &DR_INNERMOST (dr));
@@ -843,6 +850,7 @@ vect_record_base_alignments (vec_info *vinfo)
 	      (vinfo, stmt, &STMT_VINFO_DR_WRT_VEC_LOOP (stmt_info));
 	  }
       }
+    }
 }
 
 /* Return the target alignment for the vectorized form of DR.  */

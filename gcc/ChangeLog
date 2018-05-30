@@ -1,3 +1,218 @@
+2017-05-30  Jackson Woodruff  <jackson.woodruff@arm.com>
+
+	* config/aarch64/aarch64.c (aarch64_host_wide_int_compare): New.
+	(aarch64_ldrstr_offset_compare): New.
+	(aarch64_operands_adjust_ok_for_ldpstp): Update to consider all
+	load/store orderings.
+	(aarch64_gen_adjusted_ldpstp): Likewise.
+
+2018-05-30  Wilco Dijkstra  <wdijkstr@arm.com>
+
+	* config/aarch64/aarch64.c (aarch64_ira_change_pseudo_allocno_class):
+	Check for subset of GENERAL_REGS and FP_REGS.
+	* config/aarch64/aarch64-simd.md (aarch64_get_lane): Increase cost of
+	r=w alternative.
+
+2018-05-30  Richard Sandiford  <richard.sandiford@linaro.org>
+
+	* alias.c (adjust_offset_for_component_ref): Use poly_int_tree_p
+	and wi::to_poly_offset.  Add the current offset and then check
+	whether the sum fits, rather than using an unchecked addition of
+	a checked term.  Check for a shwi rather than a uhwi.
+	* expr.c (get_bit_range): Use tree_to_poly_uint64.
+	(store_constructor): Use poly_int_tree_p.
+	(expand_expr_real_1): Likewise.
+	* function.c (assign_temp): Likewise.
+	* fold-const.c (const_binop): Use poly_int_tree_p and
+	wi::to_poly_offset.
+	(fold_indirect_ref_1): Likewise.  Use multiple_p to attempt an exact
+	division.
+	* ipa-icf-gimple.c (func_checker::compare_operand): Use
+	to_poly_offset for MEM offsets.
+	* ipa-icf.c (sem_variable::equals): Likewise.
+	* stor-layout.c (compute_record_mode): Use poly_int_tree_p.
+	* tree-ssa-sccvn.c (ao_ref_init_from_vn_reference): Use
+	wi::to_poly_offset for BIT_FIELD_REF offsets.
+	(vn_reference_maybe_forwprop_address): Use poly_int_tree_p and
+	wi::to_poly_offset.
+	* var-tracking.c (emit_note_insn_var_location): Use
+	tree_to_poly_uint64.
+
+2018-05-29  Jim Wilson  <jimw@sifive.com>
+
+	* config/riscv/riscv.c (riscv_interrupt_type): Fix comment typo.
+
+2018-05-29  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/85950
+	* config/i386/i386.md (l<rounding_insn><MODEF:mode><SWI48:mode>2):
+	Enable for TARGET_SSE4_1 and generate rounds{s,d} and cvtts{s,d}2si{,q}
+	sequence.
+	(sse4_1_round<mode>2): Use nonimmediate_operand
+	for operand 1 predicate.
+
+2018-05-29  Martin Sebor  <msebor@redhat.com>
+	    Richard Biener  <rguenther@suse.de>
+
+	PR testsuite/85888
+	* calls.c (get_size_range): Call determine_value_range instead
+	of get_value_range..
+	* tree-vrp.h (determine_value_range): Declared new function.
+	* tree-vrp.c (determine_value_range_1, determine_value_range): New.
+
+2018-05-29  Richard Biener  <rguenther@suse.de>
+
+	* tree-vect-data-refs.c (vect_preserves_scalar_order_p): Make
+	sure to use non-pattern stmts for get_earlier_stmt arguments.
+	* tree-vectorizer.h (get_earlier_stmt): Assert we do not get
+	called on pattern stmts.
+	(get_later_stmt): Likewise.
+
+2018-05-29  Martin Liska  <mliska@suse.cz>
+
+        PR gcov-profile/85759
+	* doc/gcov.texi: Document GCOV_ERROR_FILE and GCOV_EXIT_AT_ERROR
+	env variables.
+
+2018-05-29  Jakub Jelinek  <jakub@redhat.com>
+
+	* tree-cfg.c (verify_gimple_assign_unary): Add checking for
+	VEC_UNPACK_*_EXPR.
+	(verify_gimple_assign_binary): Check TYPE_VECTOR_SUBPARTS for
+	VEC_PACK_*_EXPR.
+
+	PR target/85918
+	* tree.def (VEC_UNPACK_FIX_TRUNC_HI_EXPR, VEC_UNPACK_FIX_TRUNC_LO_EXPR,
+	VEC_PACK_FLOAT_EXPR): New tree codes.
+	* tree-pretty-print.c (op_code_prio): Handle
+	VEC_UNPACK_FIX_TRUNC_HI_EXPR and VEC_UNPACK_FIX_TRUNC_LO_EXPR.
+	(dump_generic_node): Handle VEC_UNPACK_FIX_TRUNC_HI_EXPR,
+	VEC_UNPACK_FIX_TRUNC_LO_EXPR and VEC_PACK_FLOAT_EXPR.
+	* tree-inline.c (estimate_operator_cost): Likewise.
+	* gimple-pretty-print.c (dump_binary_rhs): Handle VEC_PACK_FLOAT_EXPR.
+	* fold-const.c (const_binop): Likewise.
+	(const_unop): Handle VEC_UNPACK_FIX_TRUNC_HI_EXPR and
+	VEC_UNPACK_FIX_TRUNC_LO_EXPR.
+	* tree-cfg.c (verify_gimple_assign_unary): Likewise.
+	(verify_gimple_assign_binary): Handle VEC_PACK_FLOAT_EXPR.
+	* cfgexpand.c (expand_debug_expr): Handle VEC_UNPACK_FIX_TRUNC_HI_EXPR,
+	VEC_UNPACK_FIX_TRUNC_LO_EXPR and VEC_PACK_FLOAT_EXPR.
+	* expr.c (expand_expr_real_2): Likewise.
+	* optabs.def (vec_packs_float_optab, vec_packu_float_optab,
+	vec_unpack_sfix_trunc_hi_optab, vec_unpack_sfix_trunc_lo_optab,
+	vec_unpack_ufix_trunc_hi_optab, vec_unpack_ufix_trunc_lo_optab): New
+	optabs.
+	* optabs.c (expand_widen_pattern_expr): For
+	VEC_UNPACK_FIX_TRUNC_HI_EXPR and VEC_UNPACK_FIX_TRUNC_LO_EXPR use
+	sign from result type rather than operand's type.
+	(expand_binop_directly): For vec_packu_float_optab and
+	vec_packs_float_optab allow result type to be different from operand's
+	type.
+	* optabs-tree.c (optab_for_tree_code): Handle
+	VEC_UNPACK_FIX_TRUNC_HI_EXPR, VEC_UNPACK_FIX_TRUNC_LO_EXPR and
+	VEC_PACK_FLOAT_EXPR.  Formatting fixes.
+	* tree-vect-generic.c (expand_vector_operations_1):  Handle
+	VEC_UNPACK_FIX_TRUNC_HI_EXPR, VEC_UNPACK_FIX_TRUNC_LO_EXPR and
+	VEC_PACK_FLOAT_EXPR.
+	* tree-vect-stmts.c (supportable_widening_operation): Handle
+	FIX_TRUNC_EXPR.
+	(supportable_narrowing_operation): Handle FLOAT_EXPR.
+	* config/i386/i386.md (fixprefix, floatprefix): New code attributes.
+	* config/i386/sse.md (*float<floatunssuffix>v2div2sf2): Rename to ...
+	(float<floatunssuffix>v2div2sf2): ... this.  Formatting fix.
+	(vpckfloat_concat_mode, vpckfloat_temp_mode, vpckfloat_op_mode): New
+	mode attributes.
+	(vec_pack<floatprefix>_float_<mode>): New expander.
+	(vunpckfixt_mode, vunpckfixt_model, vunpckfixt_extract_mode): New mode
+	attributes.
+	(vec_unpack_<fixprefix>fix_trunc_lo_<mode>,
+	vec_unpack_<fixprefix>fix_trunc_hi_<mode>): New expanders.
+	* doc/md.texi (vec_packs_float_@var{m}, vec_packu_float_@var{m},
+	vec_unpack_sfix_trunc_hi_@var{m}, vec_unpack_sfix_trunc_lo_@var{m},
+	vec_unpack_ufix_trunc_hi_@var{m}, vec_unpack_ufix_trunc_lo_@var{m}):
+	Document.
+	* doc/generic.texi (VEC_UNPACK_FLOAT_HI_EXPR,
+	VEC_UNPACK_FLOAT_LO_EXPR): Fix pasto in description.
+	(VEC_UNPACK_FIX_TRUNC_HI_EXPR, VEC_UNPACK_FIX_TRUNC_LO_EXPR,
+	VEC_PACK_FLOAT_EXPR): Document.
+
+2018-05-29  Richard Biener  <rguenther@suse.de>
+
+	* tree-vectorizer.h (struct vec_info): Add stmt_vec_infos
+	member.
+	(stmt_vec_info_vec): Make pointer.
+	(init_stmt_vec_info_vec): Remove.
+	(free_stmt_vec_info_vec): Likewise.
+	(set_stmt_vec_info_vec): New function.
+	(free_stmt_vec_infos): Likewise.
+	(vinfo_for_stmt): Adjust for stmt_vec_info_vec indirection.
+	(set_vinfo_for_stmt): Likewise.
+	(get_earlier_stmt): Likewise.
+	(get_later_stmt): Likewise.
+	* tree-vectorizer.c (stmt_vec_info_vec): Make pointer.
+	(vec_info::vec_info): Allocate stmt_vec_infos and set the global.
+	(vec_info::~vec_info): Free stmt_vec_infos.
+	(vectorize_loops): Set the global stmt_vec_info_vec to NULL.
+	Remove old init_stmt_vec_info_vec/free_stmt_vec_info_vec calls.
+	(pass_slp_vectorize::execute): Likewise.
+	* tree-vect-stmts.c (init_stmt_vec_info_vec): Remove.
+	(free_stmt_vec_info_vec): Likewise.
+	(set_stmt_vec_info_vec): New function.
+	(free_stmt_vec_infos): Likewise.
+	* tree-vect-loop.c (_loop_vec_info::~_loop_vec_info): Set
+	the global stmt_vec_info_vec.
+	* tree-parloops.c (gather_scalar_reductions): Use
+	set_stmt_vec_info_vec/free_stmt_vec_infos and maintain a local
+	vector.
+
+2018-05-29  Richard Biener  <rguenther@suse.de>
+
+	* dominance.c (iterate_fix_dominators): Push/pop TV_DOMINANCE.
+
+2018-05-29  Martin Liska  <mliska@suse.cz>
+	    David Malcolm  <dmalcolm@redhat.com>
+
+	* vec.c (test_reverse): New.
+	(vec_c_tests): Add new test.
+	* vec.h (vl_ptr>::reverse): New function.
+
+2018-05-29  Gerald Pfeifer  <gerald@pfeifer.com>
+
+	* config.gcc: Identify FreeBSD 3.x and 4.x as unsupported.
+
+	* config/freebsd-spec.h (FBSD_LIB_SPEC): Only consider FreeBSD 5
+	and later.
+
+2018-05-28  Bernd Edlinger  <bernd.edlinger@hotmail.de>
+
+	* tree-dump.c (dump_node): Use splay_tree_delete_pointers.
+
+2018-05-28  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/85933
+	* tree-vect-data-refs.c (vect_record_base_alignments): Only
+	look at stmts marked as vectorizable.
+
+2018-05-28  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/85934
+	* tree-vect-generic.c (expand_vector_operations_1): Hoist
+	vector boolean check before scalar optimization.
+
+2018-05-28  Jakub Jelinek  <jakub@redhat.com>
+
+	* doc/invoke.texi (ARM Options): Use @item instead of @itemx
+	for armv5te.
+
+2018-05-28  Mark Wielaard  <mark@klomp.org>
+
+	* dwarf2asm.c (dw2_asm_output_delta_uleb128): Add brackets around lab2
+	if it is an expression containing a minus sign.
+
+2018-05-27  John David Anglin  <danglin@gcc.gnu.org>
+
+	* config/pa/pa-linux.h (NEED_INDICATE_EXEC_STACK): Define to 0.
+
 2018-05-27  Paul Koning  <ni1d@arrl.net>
 
 	* config/pdp11/pdp11.md (truncsihi2): Remove.
