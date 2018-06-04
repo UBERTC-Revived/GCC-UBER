@@ -632,7 +632,9 @@ var_decl_component_p (tree var)
   tree inner = var;
   while (handled_component_p (inner))
     inner = TREE_OPERAND (inner, 0);
-  return SSA_VAR_P (inner);
+  return (DECL_P (inner)
+	  || (TREE_CODE (inner) == MEM_REF
+	      && TREE_CODE (TREE_OPERAND (inner, 0)) == ADDR_EXPR));
 }
 
 /* If the SIZE argument representing the size of an object is in a range
@@ -2215,12 +2217,14 @@ gimple_fold_builtin_string_compare (gimple_stmt_iterator *gsi)
       switch (fcode)
 	{
 	case BUILT_IN_STRCMP:
+	case BUILT_IN_STRCMP_EQ:
 	  {
 	    r = strcmp (p1, p2);
 	    known_result = true;
 	    break;
 	  }
 	case BUILT_IN_STRNCMP:
+	case BUILT_IN_STRNCMP_EQ:
 	  {
 	    if (length == -1)
 	      break;
@@ -2254,6 +2258,7 @@ gimple_fold_builtin_string_compare (gimple_stmt_iterator *gsi)
 
   bool nonzero_length = length >= 1
     || fcode == BUILT_IN_STRCMP
+    || fcode == BUILT_IN_STRCMP_EQ
     || fcode == BUILT_IN_STRCASECMP;
 
   location_t loc = gimple_location (stmt);
@@ -3687,8 +3692,10 @@ gimple_fold_builtin (gimple_stmt_iterator *gsi)
     case BUILT_IN_STRSTR:
       return gimple_fold_builtin_strstr (gsi);
     case BUILT_IN_STRCMP:
+    case BUILT_IN_STRCMP_EQ:
     case BUILT_IN_STRCASECMP:
     case BUILT_IN_STRNCMP:
+    case BUILT_IN_STRNCMP_EQ:
     case BUILT_IN_STRNCASECMP:
       return gimple_fold_builtin_string_compare (gsi);
     case BUILT_IN_MEMCHR:

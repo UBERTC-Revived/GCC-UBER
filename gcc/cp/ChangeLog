@@ -1,3 +1,68 @@
+2018-06-04  Jason Merrill  <jason@redhat.com>
+
+	PR c++/61806 - missed SFINAE with partial specialization.
+	* cp-tree.h (deferring_access_check_sentinel): Add deferring_kind
+	parameter to constructor.
+	* pt.c (instantiate_class_template_1): Enable access checking
+	before call to most_specialized_partial_spec.
+
+	PR c++/85765 - SFINAE and non-type default template arg.
+	* pt.c (type_unification_real): Do full semantic processing if
+	substituting a partial args list replaces all template parms.
+
+2018-06-03  Jason Merrill  <jason@redhat.com>
+
+	PR c++/85739 - ICE with pointer to member template parm.
+	* cvt.c (perform_qualification_conversions): Use cp_fold_convert.
+
+2018-06-02  Jason Merrill  <jason@redhat.com>
+
+	PR c++/85761 - ICE with ill-formed use of const outer variable.
+	* expr.c (mark_use): Handle location wrappers.
+
+2018-06-01  Jason Merrill  <jason@redhat.com>
+
+	PR c++/85764 - bogus 'this' not captured error.
+	* lambda.c (resolvable_dummy_lambda): Use nonlambda_method_basetype.
+	(nonlambda_method_basetype): Handle NSDMI.
+
+	CWG 1581: When are constexpr member functions defined?
+	* constexpr.c (instantiate_cx_fn_r, instantiate_constexpr_fns): New.
+	(cxx_eval_outermost_constant_expr): Call instantiate_constexpr_fns.
+
+	PR c++/58281 - explicit instantiation of constexpr
+	* pt.c (mark_decl_instantiated): Clear DECL_EXTERNAL.
+
+	* pt.c (instantiate_decl): Any defaulted function is defined.
+
+2018-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR c++/77777
+	* call.c (resolve_args): Use location of expression, not current input
+	location.
+
+2018-05-30  Ville Voutilainen  <ville.voutilainen@gmail.com>
+
+	Do not warn about zero-as-null when NULL is used.
+	* call.c (conversion_null_warnings): Check for pointer
+	types converted from zero constants.
+	(convert_like_real): Add a warning sentinel at the end.
+	* tree.c (maybe_warn_zero_as_null_pointer_constant): Also
+	check null_node_p.
+
+2018-05-30  Jason Merrill  <jason@redhat.com>
+
+	PR c++/85807 - ICE with call in template NSDMI.
+	* init.c (get_nsdmi): Use push_to/pop_from_top_level.
+	* tree.c (bot_manip): Don't set_flags_from_callee in a template.
+
+	PR c++/85873 - constant initializer_list array not in .rodata.
+	* tree.c (build_target_expr): Set TREE_READONLY.
+	* call.c (set_up_extended_ref_temp): Set TREE_READONLY.
+
+	* parser.c (cp_parser_check_condition_declarator): Handle
+	cp_error_declarator.
+
 2018-05-30  Jonathan Wakely  <jwakely@redhat.com>
 
 	* typeck.c (cxx_sizeof_or_alignof_type): Return size_one_node instead

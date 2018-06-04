@@ -461,6 +461,14 @@ build_target_expr (tree decl, tree value, tsubst_flags_t complain)
 		       || useless_type_conversion_p (TREE_TYPE (decl),
 						     TREE_TYPE (value)));
 
+  /* Set TREE_READONLY for optimization, such as gimplify_init_constructor
+     moving a constant aggregate into .rodata.  */
+  if (CP_TYPE_CONST_NON_VOLATILE_P (type)
+      && !TYPE_HAS_NONTRIVIAL_DESTRUCTOR (type)
+      && !VOID_TYPE_P (TREE_TYPE (value))
+      && reduced_constant_expression_p (value))
+    TREE_READONLY (decl) = true;
+
   if (complain & tf_no_cleanup)
     /* The caller is building a new-expr and does not need a cleanup.  */
     t = NULL_TREE;
@@ -3007,7 +3015,8 @@ bot_manip (tree* tp, int* walk_subtrees, void* data_)
   /* Make a copy of this node.  */
   t = copy_tree_r (tp, walk_subtrees, NULL);
   if (TREE_CODE (*tp) == CALL_EXPR || TREE_CODE (*tp) == AGGR_INIT_EXPR)
-    set_flags_from_callee (*tp);
+    if (!processing_template_decl)
+      set_flags_from_callee (*tp);
   if (data.clear_location && EXPR_HAS_LOCATION (*tp))
     SET_EXPR_LOCATION (*tp, input_location);
   return t;
@@ -5423,7 +5432,7 @@ bool
 maybe_warn_zero_as_null_pointer_constant (tree expr, location_t loc)
 {
   if (c_inhibit_evaluation_warnings == 0
-      && !NULLPTR_TYPE_P (TREE_TYPE (expr)))
+      && !null_node_p (expr) && !NULLPTR_TYPE_P (TREE_TYPE (expr)))
     {
       warning_at (loc, OPT_Wzero_as_null_pointer_constant,
 		  "zero as null pointer constant");

@@ -5860,7 +5860,8 @@ dwarf2out_die_ref_for_decl (tree decl, const char **sym,
 {
   dw_die_ref die;
 
-  if (flag_wpa && !decl_die_table)
+  if ((flag_wpa || flag_incremental_link == INCREMENTAL_LINK_LTO)
+      && !decl_die_table)
     return false;
 
   if (TREE_CODE (decl) == BLOCK)
@@ -5870,10 +5871,11 @@ dwarf2out_die_ref_for_decl (tree decl, const char **sym,
   if (!die)
     return false;
 
-  /* During WPA stage we currently use DIEs to store the
-     decl <-> label + offset map.  That's quite inefficient but it
-     works for now.  */
-  if (flag_wpa)
+  /* During WPA stage and incremental linking we currently use DIEs
+     to store the decl <-> label + offset map.  That's quite inefficient
+     but it works for now.  */
+  if (flag_wpa
+      || flag_incremental_link == INCREMENTAL_LINK_LTO)
     {
       dw_die_ref ref = get_AT_ref (die, DW_AT_abstract_origin);
       if (!ref)
@@ -5924,7 +5926,8 @@ dwarf2out_register_external_die (tree decl, const char *sym,
   if (debug_info_level == DINFO_LEVEL_NONE)
     return;
 
-  if (flag_wpa && !decl_die_table)
+  if ((flag_wpa
+       || flag_incremental_link == INCREMENTAL_LINK_LTO) && !decl_die_table)
     decl_die_table = hash_table<decl_die_hasher>::create_ggc (1000);
 
   dw_die_ref die
@@ -5959,7 +5962,8 @@ dwarf2out_register_external_die (tree decl, const char *sym,
 	parent = BLOCK_DIE (ctx);
       else if (TREE_CODE (ctx) == TRANSLATION_UNIT_DECL
 	       /* Keep the 1:1 association during WPA.  */
-	       && !flag_wpa)
+	       && !flag_wpa
+	       && flag_incremental_link != INCREMENTAL_LINK_LTO)
 	/* Otherwise all late annotations go to the main CU which
 	   imports the original CUs.  */
 	parent = comp_unit_die ();
@@ -5980,7 +5984,7 @@ dwarf2out_register_external_die (tree decl, const char *sym,
   switch (TREE_CODE (decl))
     {
     case TRANSLATION_UNIT_DECL:
-      if (! flag_wpa)
+      if (! flag_wpa && flag_incremental_link != INCREMENTAL_LINK_LTO)
 	{
 	  die = comp_unit_die ();
 	  dw_die_ref import = new_die (DW_TAG_imported_unit, die, NULL_TREE);
@@ -31293,9 +31297,15 @@ dwarf2out_finish (const char *)
     {
       if (have_location_lists)
 	{
-	  if (dwarf_version >= 5)
-	    add_AT_loclistsptr (comp_unit_die (), DW_AT_loclists_base,
-				loc_section_label);
+	  /* Since we generate the loclists in the split DWARF .dwo
+	     file itself, we don't need to generate a loclists_base
+	     attribute for the split compile unit DIE.  That attribute
+	     (and using relocatable sec_offset FORMs) isn't allowed
+	     for a split compile unit.  Only if the .debug_loclists
+	     section was in the main file, would we need to generate a
+	     loclists_base attribute here (for the full or skeleton
+	     unit DIE).  */
+
 	  /* optimize_location_lists calculates the size of the lists,
 	     so index them first, and assign indices to the entries.
 	     Although optimize_location_lists will remove entries from

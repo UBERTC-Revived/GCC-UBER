@@ -601,16 +601,16 @@ gnat_to_gnu_entity (Entity_Id gnat_entity, tree gnu_expr, bool definition)
 	 was defined to represent.  This is necessary to avoid generating dumb
 	 elaboration code in simple cases, but we may throw it away later if it
 	 is not a constant.  But do not retrieve it if it is an allocator since
-	 the designated type might still be dummy at this point.  */
+	 the designated type might still be dummy at this point.  Note that we
+	 invoke gnat_to_gnu_external and not gnat_to_gnu because the expression
+	 may contain N_Expression_With_Actions nodes and thus declarations of
+	 objects from other units that we need to discard.  */
       if (!definition
 	  && !No_Initialization (Declaration_Node (gnat_entity))
-	  && Present (Expression (Declaration_Node (gnat_entity)))
-	  && Nkind (Expression (Declaration_Node (gnat_entity)))
-	     != N_Allocator)
-	  /* The expression may contain N_Expression_With_Actions nodes and
-	     thus object declarations from other units.  Discard them.  */
-	gnu_expr
-	  = gnat_to_gnu_external (Expression (Declaration_Node (gnat_entity)));
+	  && Present (gnat_temp = Expression (Declaration_Node (gnat_entity)))
+	  && Nkind (gnat_temp) != N_Allocator
+	  && (!type_annotate_only || Compile_Time_Known_Value (gnat_temp)))
+	gnu_expr = gnat_to_gnu_external (gnat_temp);
 
       /* ... fall through ... */
 
@@ -1888,10 +1888,6 @@ gnat_to_gnu_entity (Entity_Id gnat_entity, tree gnu_expr, bool definition)
 			    UI_To_gnu (RM_Size (gnat_entity), bitsizetype));
 	  TYPE_PACKED_ARRAY_TYPE_P (gnu_type) = 1;
 
-	  /* Strip the ___XP suffix for standard DWARF.  */
-	  if (gnat_encodings == DWARF_GNAT_ENCODINGS_MINIMAL)
-	    gnu_entity_name = TYPE_NAME (gnu_type);
-
 	  /* Create a stripped-down declaration, mainly for debugging.  */
 	  create_type_decl (gnu_entity_name, gnu_type, true, debug_info_p,
 			    gnat_entity);
@@ -2638,17 +2634,6 @@ gnat_to_gnu_entity (Entity_Id gnat_entity, tree gnu_expr, bool definition)
 		set_nonaliased_component_on_array_type (gnu_type);
 	    }
 
-	  /* Strip the ___XP suffix for standard DWARF.  */
-	  if (Is_Packed_Array_Impl_Type (gnat_entity)
-	      && gnat_encodings == DWARF_GNAT_ENCODINGS_MINIMAL)
-	    {
-	      Entity_Id gnat_original_array_type
-		= Underlying_Type (Original_Array_Type (gnat_entity));
-
-	      gnu_entity_name
-		= get_entity_name (gnat_original_array_type);
-	    }
-
 	  /* Attach the TYPE_STUB_DECL in case we have a parallel type.  */
 	  TYPE_STUB_DECL (gnu_type)
 	    = create_type_stub_decl (gnu_entity_name, gnu_type);
@@ -2774,13 +2759,10 @@ gnat_to_gnu_entity (Entity_Id gnat_entity, tree gnu_expr, bool definition)
 	     array subtypes the same alias set.  */
 	  relate_alias_sets (gnu_type, gnu_base_type, ALIAS_SET_COPY);
 
-	  /* If this is a packed type, make this type the same as the packed
-	     array type, but do some adjusting in the type first.  */
+	  /* If this is a packed type implemented specially, then replace our
+	     type with the implementation type.  */
 	  if (Present (Packed_Array_Impl_Type (gnat_entity)))
 	    {
-	      Entity_Id gnat_index;
-	      tree gnu_inner;
-
 	      /* First finish the type we had been making so that we output
 		 debugging information for it.  */
 	      process_attributes (&gnu_type, &attr_list, false, gnat_entity);
@@ -2795,26 +2777,24 @@ gnat_to_gnu_entity (Entity_Id gnat_entity, tree gnu_expr, bool definition)
 		 That's sort of "morally" true and will make it possible for
 		 the debugger to look it up by name in DWARF, which is needed
 		 in order to decode the packed array type.  */
-	      gnu_decl
+	      tree gnu_tmp_decl
 		= create_type_decl (gnu_entity_name, gnu_type,
 				    !Comes_From_Source (Etype (gnat_entity))
 				    && artificial_p, debug_info_p,
 				    gnat_entity);
-
 	      /* Save it as our equivalent in case the call below elaborates
 		 this type again.  */
-	      save_gnu_tree (gnat_entity, gnu_decl, false);
+	      save_gnu_tree (gnat_entity, gnu_tmp_decl, false);
 
-	      gnu_decl
-		= gnat_to_gnu_entity (Packed_Array_Impl_Type (gnat_entity),
-				      NULL_TREE, false);
-	      this_made_decl = true;
-	      gnu_type = TREE_TYPE (gnu_decl);
+	      gnu_type
+		= gnat_to_gnu_type (Packed_Array_Impl_Type (gnat_entity));
 	      save_gnu_tree (gnat_entity, NULL_TREE, false);
-	      save_gnu_tree (gnat_entity, gnu_decl, false);
-	      saved = true;
 
-	      gnu_inner = gnu_type;
+	      /* Set the ___XP suffix for GNAT encodings.  */
+	      if (gnat_encodings != DWARF_GNAT_ENCODINGS_MINIMAL)
+		gnu_entity_name = DECL_NAME (TYPE_NAME (gnu_type));
+
+	      tree gnu_inner = gnu_type;
 	      while (TREE_CODE (gnu_inner) == RECORD_TYPE
 		     && (TYPE_JUSTIFIED_MODULAR_P (gnu_inner)
 			 || TYPE_PADDING_P (gnu_inner)))
@@ -2851,7 +2831,7 @@ gnat_to_gnu_entity (Entity_Id gnat_entity, tree gnu_expr, bool definition)
 		      gcc_checking_assert (!TYPE_ACTUAL_BOUNDS (gnu_inner));
 		    }
 
-		  for (gnat_index = First_Index (gnat_entity);
+		  for (Entity_Id gnat_index = First_Index (gnat_entity);
 		       Present (gnat_index);
 		       gnat_index = Next_Index (gnat_index))
 		    SET_TYPE_ACTUAL_BOUNDS
@@ -5051,23 +5031,19 @@ gnat_to_gnu_component_type (Entity_Id gnat_array, bool definition,
 		     Is_Bit_Packed_Array (gnat_array) ? TYPE_DECL : VAR_DECL,
 		     true, Has_Component_Size_Clause (gnat_array));
 
-  /* If the array has aliased components and the component size can be zero,
-     force at least unit size to ensure that the components have distinct
-     addresses.  */
-  if (!gnu_comp_size
-      && Has_Aliased_Components (gnat_array)
-      && (integer_zerop (TYPE_SIZE (gnu_type))
-	  || (TREE_CODE (gnu_type) == ARRAY_TYPE
-	      && !TREE_CONSTANT (TYPE_SIZE (gnu_type)))))
-    gnu_comp_size
-      = size_binop (MAX_EXPR, TYPE_SIZE (gnu_type), bitsize_unit_node);
-
   /* If the component type is a RECORD_TYPE that has a self-referential size,
      then use the maximum size for the component size.  */
   if (!gnu_comp_size
       && TREE_CODE (gnu_type) == RECORD_TYPE
       && CONTAINS_PLACEHOLDER_P (TYPE_SIZE (gnu_type)))
     gnu_comp_size = max_size (TYPE_SIZE (gnu_type), true);
+
+  /* If the array has aliased components and the component size is zero, force
+     the unit size to ensure that the components have distinct addresses.  */
+  if (!gnu_comp_size
+      && Has_Aliased_Components (gnat_array)
+      && integer_zerop (TYPE_SIZE (gnu_type)))
+    gnu_comp_size = bitsize_unit_node;
 
   /* Honor the component size.  This is not needed for bit-packed arrays.  */
   if (gnu_comp_size && !Is_Bit_Packed_Array (gnat_array))
@@ -5089,6 +5065,30 @@ gnat_to_gnu_component_type (Entity_Id gnat_array, bool definition,
       if (gnu_type != orig_type && !DECL_P (TYPE_NAME (gnu_type)))
 	create_type_decl (TYPE_NAME (gnu_type), gnu_type, true, debug_info_p,
 			  gnat_array);
+    }
+
+  /* This is a very special case where the array has aliased components and the
+     component size might be zero at run time.  As explained above, we force at
+     least the unit size but we don't want to build a distinct padding type for
+     each invocation (they are not canonicalized if they have variable size) so
+     we cache this special padding type as TYPE_PADDING_FOR_COMPONENT.  */
+  else if (Has_Aliased_Components (gnat_array)
+	   && TREE_CODE (gnu_type) == ARRAY_TYPE
+	   && !TREE_CONSTANT (TYPE_SIZE (gnu_type)))
+    {
+      if (TYPE_PADDING_FOR_COMPONENT (gnu_type))
+	gnu_type = TYPE_PADDING_FOR_COMPONENT (gnu_type);
+      else
+	{
+	  gnu_comp_size
+	    = size_binop (MAX_EXPR, TYPE_SIZE (gnu_type), bitsize_unit_node);
+	  TYPE_PADDING_FOR_COMPONENT (gnu_type)
+	    = maybe_pad_type (gnu_type, gnu_comp_size, 0, gnat_array,
+			      true, false, definition, true);
+	  gnu_type = TYPE_PADDING_FOR_COMPONENT (gnu_type);
+	  create_type_decl (TYPE_NAME (gnu_type), gnu_type, true, debug_info_p,
+			    gnat_array);
+	}
     }
 
   if (Has_Atomic_Components (gnat_array) || Is_Atomic_Or_VFA (gnat_type))

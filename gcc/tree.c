@@ -7360,6 +7360,9 @@ add_expr (const_tree t, inchash::hash &hstate, unsigned int flags)
       for (i = 0; i < TREE_VEC_LENGTH (t); ++i)
 	inchash::add_expr (TREE_VEC_ELT (t, i), hstate, flags);
       return;
+    case IDENTIFIER_NODE:
+      hstate.add_object (IDENTIFIER_HASH_VALUE (t));
+      return;
     case FUNCTION_DECL:
       /* When referring to a built-in FUNCTION_DECL, use the __builtin__ form.
 	 Otherwise nodes that compare equal according to operand_equal_p might
@@ -10275,6 +10278,14 @@ build_common_builtin_nodes (void)
 				    NULL_TREE);
   local_define_builtin ("__builtin_memcmp_eq", ftype, BUILT_IN_MEMCMP_EQ,
 			"__builtin_memcmp_eq",
+			ECF_PURE | ECF_NOTHROW | ECF_LEAF);
+
+  local_define_builtin ("__builtin_strncmp_eq", ftype, BUILT_IN_STRNCMP_EQ,
+			"__builtin_strncmp_eq",
+			ECF_PURE | ECF_NOTHROW | ECF_LEAF);
+
+  local_define_builtin ("__builtin_strcmp_eq", ftype, BUILT_IN_STRCMP_EQ,
+			"__builtin_strcmp_eq",
 			ECF_PURE | ECF_NOTHROW | ECF_LEAF);
 
   /* If there's a possibility that we might use the ARM EABI, build the

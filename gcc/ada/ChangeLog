@@ -1,3 +1,174 @@
+2018-06-02  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/decl.c (gnat_to_gnu_entity) <E_Constant>: If this is
+	not a definition, retrieve the expression only if it's a compile-time
+	known value if we are just annotating types.
+
+	* gcc-interface/utils.c (convert): Do not try to upcast properly for a
+	conversion between tagged types in type_annotate_only mode.
+
+2018-06-02  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/ada-tree.h (TYPE_PADDING_FOR_COMPONENT): New macro.
+	* gcc-interface/decl.c (gnat_to_gnu_component_type): Cache the padding
+	type built for an aliased component with variable size.
+
+2018-05-31  Pierre-Marie de Rodat  <derodat@adacore.com>
+
+	* doc/gnat_ugn/project-manager-figure.png: Delete.
+
+2018-05-31  Pierre-Marie de Rodat  <derodat@adacore.com>
+
+	* vxworks-arm-link.spec, vxworks-e500-link.spec,
+	vxworks-gnat-crtbe-link.spec, vxworks-smp-arm-link.spec,
+	vxworks-smp-e500-link.spec, vxworks-smp-ppc-link.spec,
+	vxworks-smp-x86-link.spec: New files.
+
+2018-05-31  Pierre-Marie de Rodat  <derodat@adacore.com>
+
+	* gnatvsn.adb: Re-center the copyright header.
+	* indepsw-darwin.adb: Adjust the starting copyright year to 2011.
+
+2018-05-31  Fedor Rybin  <frybin@adacore.com>
+
+	* doc/gnat_ugn/gnat_utility_programs.rst: Document Stubs_Subdir in
+	gnattest section on user guide.
+
+2018-05-31  Ed Schonberg  <schonberg@adacore.com>
+
+	* sem_res.adb (Resolve_String_Literal): If the type is a string type
+	whose component subtype has a static predicate, ensure that the
+	predicate is applied to each character by expanding the string into the
+	equivalent aggregate. This is also done if the component subtype is
+	constrained.
+
+2018-05-31  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/trans.c (Call_to_gnu): Remove obsolete code.
+
+2018-05-31  Piotr Trojanek  <trojanek@adacore.com>
+
+	* sem_ch6.adb (Check_Missing_Return): Handle procedures with no
+	explicit spec.
+
+2018-05-31  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/trans.c (Call_to_gnu): In the by-reference case, if
+	the type of the parameter is an unconstrained array type, convert
+	to the type of the actual before the type of the formal only if the
+	conversion was suppressed earlier.  Use in_param and gnu_actual_type
+	local variables throughout, and uniform spelling for In Out or Out.
+	Also remove dead code in the component-by-reference case.
+
+2018-05-31  Frederic Konrad  <konrad@adacore.com>
+
+	* tracebak.c (STOP_FRAME): Harden condition.
+	(is_return_from, EXTRA_STOP_CONDITION): New helpers for VxWorks in RTP
+	mode.
+
+2018-05-31  Ed Schonberg  <schonberg@adacore.com>
+
+	* checks.adb (Apply_Discriminant_Check): Do not apply discriminant
+	check to a call to a build-in-place function, given that the return
+	object is limited and cannot be copied.
+
+2018-05-31  Olivier Hainque  <hainque@adacore.com>
+
+	* libgnat/s-atopri.ads: Update comment on __atomic_compare_exchange
+	builtins.
+
+2018-05-31  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/trans.c (Call_to_gnu): If this is a function call and
+	there is no target, also create a temporary for the return value for
+	an allocator if the type is an unconstrained record type with default
+	discriminant.
+
+2018-05-31  Hristian Kirtchev  <kirtchev@adacore.com>
+
+	* exp_ch7.adb (Find_Transient_Context): An iteration scheme is a valid
+	boudary for a transient scope.
+
+2018-05-31  Valentine Reboul  <reboul@adacore.com>
+
+	* gnatvsn.ads: Rename "GPL" version to "Community".
+
+2018-05-31  Ed Schonberg  <schonberg@adacore.com>
+
+	* einfo.ads: Improve documentation for the Is_Unsigned_Type entity
+	flag.
+
+2018-05-31  Piotr Trojanek  <trojanek@adacore.com>
+
+	* sem_prag.adb (Analyze_Pragma): Replace call to Unique_Defining_Entity
+	with a semantically equivalent call to Defining_Entity.
+
+2018-05-31  Piotr Trojanek  <trojanek@adacore.com>
+
+	* sem_prag.adb (Analyze_Pragma): Set Etype on the rewritten
+	Max_Queue_Length expression.
+
+2018-05-31  Sergey Rybin  <rybin@adacore.com>
+
+	* doc/gnat_ugn/gnat_and_program_execution.rst: gnatelim does not need
+	that the main unit to be built before the call, now it computes the
+	closure of the main unit itself.
+	* gnat_ugn.texi: Regenerate.
+
+2018-05-31  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* repinfo.adb (List_Structural_Record_Layout): Set First to false
+	after having listed the fields of the parent type, if any.
+
+2018-05-31  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/decl.c (gnat_to_gnu_entity) <discrete_type>: Do not
+	deal with the ___XP suffix for packed array types here...
+	<E_Array_Subtype>: ...or here when processing the implementation type
+	but when processing the original type instead.  Do not reuse the DECL
+	of the implementation type for the original type.  Tidy up.
+
+2018-05-31  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* einfo.ads (Object_Size_Clause): Declare.
+	* einfo.adb (Object_Size_Clause): New function.
+	* gcc-interface/utils.c (maybe_pad_type): Test Has_Size_Clause before
+	retrieving Size_Clause and post the warning on the object size clause
+	if Has_Object_Size_Clause is true.
+
+2018-05-31  Javier Miranda  <miranda@adacore.com>
+
+	* sem_util.ads, sem_util.adb (Find_Primitive_Eq): New subprogram.
+	* exp_ch4.adb (Expand_Composite_Equality): Use the new subprogram
+	Find_Primitive_Eq to search for the primitive of types whose underlying
+	type is a tagged type.
+
+2018-05-31  Yannick Moy  <moy@adacore.com>
+
+	* sem_prag.adb (Analyze_Pragma.Check_Loop_Pragma_Placement): Inverse
+	order of treatment between nodes recognized as loop pragmas (or
+	generated from one) and block statements.
+
+2018-05-31  Doug Rupp  <rupp@adacore.com>
+
+	* libgnat/s-osprim__posix2008.adb (Clock): Implement using
+	clock_gettime.
+
+2018-05-31  Ed Schonberg  <schonberg@adacore.com>
+
+	* exp_unst.ads, exp_unst.adb (In_Synchronized_Unit): New predicate to
+	mark subprograms that cannot be eliminated because they must be treated
+	as reachable from outside the current unit. This includes entry bodies
+	and protected operations.
+
+2018-05-31  Ed Schonberg  <schonberg@adacore.com>
+
+	* exp_ch4.adb (Expand_Modular_Addition, Expand_Modular_Subtraction):
+	Convert all operands of the generated code to Standard.Unsigned, to
+	prevent spurious visibility errors. This is needed when the generated
+	expansion involves a modular index type of an array type, and the index
+	type is not immediately visible.
+
 2018-05-30  Piotr Trojanek  <trojanek@adacore.com>
 
 	* einfo.ads (Package_Instantiation): Update comment after a routine

@@ -3814,7 +3814,7 @@ expand_builtin_strcpy_args (tree dest, tree src, rtx target)
    mode MODE if that's convenient).  */
 
 static rtx
-expand_builtin_stpcpy (tree exp, rtx target, machine_mode mode)
+expand_builtin_stpcpy_1 (tree exp, rtx target, machine_mode mode)
 {
   tree dst, src;
   location_t loc = EXPR_LOCATION (exp);
@@ -3889,6 +3889,25 @@ expand_builtin_stpcpy (tree exp, rtx target, machine_mode mode)
 
       return expand_movstr (dst, src, target, /*endp=*/2);
     }
+}
+
+/* Expand a call EXP to the stpcpy builtin and diagnose uses of nonstring
+   arguments while being careful to avoid duplicate warnings (which could
+   be issued if the expander were to expand the call, resulting in it
+   being emitted in expand_call().  */
+
+static rtx
+expand_builtin_stpcpy (tree exp, rtx target, machine_mode mode)
+{
+  if (rtx ret = expand_builtin_stpcpy_1 (exp, target, mode))
+    {
+      /* The call has been successfully expanded.  Check for nonstring
+	 arguments and issue warnings as appropriate.  */
+      maybe_warn_nonstring_arg (get_callee_fndecl (exp), exp);
+      return ret;
+    }
+
+  return NULL_RTX;
 }
 
 /* Check a call EXP to the stpncpy built-in for validity.
@@ -7120,11 +7139,44 @@ expand_builtin (tree exp, rtx target, rtx subtarget, machine_mode mode,
 	return target;
       break;
 
+    /* Expand it as BUILT_IN_MEMCMP_EQ first. If not successful, change it 
+       back to a BUILT_IN_STRCMP. Remember to delete the 3rd paramater
+       when changing it to a strcmp call.  */
+    case BUILT_IN_STRCMP_EQ:
+      target = expand_builtin_memcmp (exp, target, true);
+      if (target)
+	return target;
+
+      /* Change this call back to a BUILT_IN_STRCMP.  */
+      TREE_OPERAND (exp, 1) 
+	= build_fold_addr_expr (builtin_decl_explicit (BUILT_IN_STRCMP));
+
+      /* Delete the last parameter.  */
+      unsigned int i;
+      vec<tree, va_gc> *arg_vec;
+      vec_alloc (arg_vec, 2);
+      for (i = 0; i < 2; i++)
+	arg_vec->quick_push (CALL_EXPR_ARG (exp, i));
+      exp = build_call_vec (TREE_TYPE (exp), CALL_EXPR_FN (exp), arg_vec);
+      /* FALLTHROUGH */
+
     case BUILT_IN_STRCMP:
       target = expand_builtin_strcmp (exp, target);
       if (target)
 	return target;
       break;
+
+    /* Expand it as BUILT_IN_MEMCMP_EQ first. If not successful, change it
+       back to a BUILT_IN_STRNCMP.  */
+    case BUILT_IN_STRNCMP_EQ:
+      target = expand_builtin_memcmp (exp, target, true);
+      if (target)
+	return target;
+
+      /* Change it back to a BUILT_IN_STRNCMP.  */
+      TREE_OPERAND (exp, 1) 
+	= build_fold_addr_expr (builtin_decl_explicit (BUILT_IN_STRNCMP));
+      /* FALLTHROUGH */
 
     case BUILT_IN_STRNCMP:
       target = expand_builtin_strncmp (exp, target, mode);
@@ -8214,6 +8266,9 @@ fold_builtin_sincos (location_t loc,
       call = builtin_save_expr (call);
     }
 
+  tree ptype = build_pointer_type (type);
+  arg1 = fold_convert (ptype, arg1);
+  arg2 = fold_convert (ptype, arg2);
   return build2 (COMPOUND_EXPR, void_type_node,
 		 build2 (MODIFY_EXPR, void_type_node,
 			 build_fold_indirect_ref_loc (loc, arg1),

@@ -10850,6 +10850,10 @@ instantiate_class_template_1 (tree type)
   /* Mark the type as in the process of being defined.  */
   TYPE_BEING_DEFINED (type) = 1;
 
+  /* We may be in the middle of deferred access check.  Disable
+     it now.  */
+  deferring_access_check_sentinel acs (dk_no_deferred);
+
   /* Determine what specialization of the original template to
      instantiate.  */
   t = most_specialized_partial_spec (type, tf_warning_or_error);
@@ -10888,10 +10892,6 @@ instantiate_class_template_1 (tree type)
   /* If we've recursively instantiated too many templates, stop.  */
   if (! push_tinst_level (type))
     return type;
-
-  /* We may be in the middle of deferred access check.  Disable
-     it now.  */
-  push_deferring_access_checks (dk_no_deferred);
 
   int saved_unevaluated_operand = cp_unevaluated_operand;
   int saved_inhibit_evaluation_warnings = c_inhibit_evaluation_warnings;
@@ -11373,7 +11373,6 @@ instantiate_class_template_1 (tree type)
   maximum_field_alignment = saved_maximum_field_alignment;
   if (!fn_context)
     pop_from_top_level ();
-  pop_deferring_access_checks ();
   pop_tinst_level ();
 
   /* The vtable for a template class can be emitted in any translation
@@ -20387,8 +20386,6 @@ type_unification_real (tree tparms,
 	  location_t save_loc = input_location;
 	  if (DECL_P (parm))
 	    input_location = DECL_SOURCE_LOCATION (parm);
-	  if (saw_undeduced == 1)
-	    ++processing_template_decl;
 
 	  if (saw_undeduced == 1
 	      && TREE_CODE (parm) == PARM_DECL
@@ -20396,11 +20393,14 @@ type_unification_real (tree tparms,
 	    {
 	      /* The type of this non-type parameter depends on undeduced
 		 parameters.  Don't try to use its default argument yet,
+		 since we might deduce an argument for it on the next pass,
 		 but do check whether the arguments we already have cause
 		 substitution failure, so that that happens before we try
 		 later default arguments (78489).  */
+	      ++processing_template_decl;
 	      tree type = tsubst (TREE_TYPE (parm), full_targs, complain,
 				  NULL_TREE);
+	      --processing_template_decl;
 	      if (type == error_mark_node)
 		arg = error_mark_node;
 	      else
@@ -20408,10 +20408,27 @@ type_unification_real (tree tparms,
 	    }
 	  else
 	    {
-	      arg = tsubst_template_arg (arg, full_targs, complain, NULL_TREE);
+	      tree substed = NULL_TREE;
+	      if (saw_undeduced == 1 && processing_template_decl == 0)
+		{
+		  /* First instatiate in template context, in case we still
+		     depend on undeduced template parameters.  */
+		  ++processing_template_decl;
+		  substed = tsubst_template_arg (arg, full_targs, complain,
+						 NULL_TREE);
+		  --processing_template_decl;
+		  if (substed != error_mark_node
+		      && !uses_template_parms (substed))
+		    /* We replaced all the tparms, substitute again out of
+		       template context.  */
+		    substed = NULL_TREE;
+		}
+	      if (!substed)
+		substed = tsubst_template_arg (arg, full_targs, complain,
+					       NULL_TREE);
 
-	      if (!uses_template_parms (arg))
-		arg = convert_template_argument (parm, arg, full_targs,
+	      if (!uses_template_parms (substed))
+		arg = convert_template_argument (parm, substed, full_targs,
 						 complain, i, NULL_TREE);
 	      else if (saw_undeduced == 1)
 		arg = NULL_TREE;
@@ -20419,8 +20436,6 @@ type_unification_real (tree tparms,
 		arg = error_mark_node;
 	    }
 
-	  if (saw_undeduced == 1)
-	    --processing_template_decl;
 	  input_location = save_loc;
 	  *checks = get_deferred_access_checks ();
 	  pop_deferring_access_checks ();
@@ -22168,6 +22183,12 @@ mark_decl_instantiated (tree result, int extern_p)
 	 linkonce sections.  */
       else if (TREE_PUBLIC (result))
 	maybe_make_one_only (result);
+      if (TREE_CODE (result) == FUNCTION_DECL
+	  && DECL_TEMPLATE_INSTANTIATED (result))
+	/* If the function has already been instantiated, clear DECL_EXTERNAL,
+	   since start_preparsed_function wouldn't have if we had an earlier
+	   extern explicit instantiation.  */
+	DECL_EXTERNAL (result) = 0;
     }
 
   /* If EXTERN_P, then this function will not be emitted -- unless
@@ -23748,7 +23769,7 @@ instantiate_decl (tree d, bool defer_ok, bool expl_inst_class_mem_p)
       deleted_p = DECL_DELETED_FN (code_pattern);
       pattern_defined = ((DECL_SAVED_TREE (code_pattern) != NULL_TREE
 			  && DECL_INITIAL (code_pattern) != error_mark_node)
-			 || DECL_DEFAULTED_OUTSIDE_CLASS_P (code_pattern)
+			 || DECL_DEFAULTED_FN (code_pattern)
 			 || deleted_p);
     }
   else
